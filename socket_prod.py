@@ -15,6 +15,8 @@ import time
 import tkinter as tk
 from tkinter import ttk
 
+# TODO: make changes for v2 ASIC
+
 def init_controller():
 	c = Controller()
 	c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
