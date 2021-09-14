@@ -2,7 +2,7 @@
 # after running env3  
 # cd ~/larpixv2/ ;  source bin/activate
 
-import subprocess,sys
+import subprocess,sys,os
 import larpix
 from larpix import Controller
 #from larpix.io.zmq_io import ZMQ_IO
@@ -13,6 +13,12 @@ import tkinter as tk
 from tkinter import ttk
 import h5py
 import pandas as pd
+import runpy
+import simpleaudio as sa
+
+sadSong = sa.WaveObject.from_wave_file('sounds/Sad_Trombone-Joe_Lamb-665429450.wav')
+successSong = sa.WaveObject.from_wave_file('sounds/TaDaSoundBible.com-1884170640.wav')
+doneSong = sa.WaveObject.from_wave_file('sounds/service-bell_daniel_simion.wav')
 
 NumASICchannels = 64
 DisabledChannels = [6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
@@ -37,13 +43,197 @@ def init_controller():
 	c.io.ping()
 	return c
 
-def init_board(c):
+def init_board(c,io_chan=1):
 	#c.load('../configs/controller/pcb-3_chip_info.json')
 	#c.load('../configs/controller/socket-board-v1.json')
-	c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_1.json')
+	if io_chan==1:
+		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_1.json')
+	elif io_chan==2:
+		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_2.json')
+	elif io_chan==3:
+		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_3.json')
+	elif io_chan==4:
+		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_4.json')
+	else:
+		exit('bad IO channel specified')
+
 	c.io.ping()
 
+def measure_currents(c):
+	loop=0
+	looplimit=2
+	while loop<looplimit :
+		vddd_meas=c.io.get_vddd()
+		vdda_meas=c.io.get_vdda()
+		print('read vddd =',vddd_meas)
+		print('read vdda =',vdda_meas)
+		loop=loop+1	
+
+def powerdown_exit(c):
+	#Disable chip power and interface at end
+	# Disable Tile
+	c.io.disable_tile()
+	#zero supply voltages
+	c.io.set_vddd(0) # set vddd 0V
+	c.io.set_vdda(0) # set vdda 0V
+	exit()
+
+#test flipping bits in config register and see that they configure
+def test_config_registers(c,chip):
+	#print(chip.config)
+	#invert chip config (for many registers)
+	# CSA GAIN
+	flipmask=0b1
+	chip.config.csa_gain=flipmask^chip.config.csa_gain
+	# CSA BYPASS ENABLE
+	flipmask=0b1
+	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
+	# BYPASS CAPS EN
+	flipmask=0b1
+	chip.config.bypass_caps_en=flipmask^chip.config.bypass_caps_en
+	# PERIODIC RESET CYCLES
+	flipmask=0xFF_FFFF
+	chip.config.periodic_reset_cycles=flipmask^chip.config.periodic_reset_cycles
+
+	for chan in range(0,NumASICchannels):
+
+		# Pixel Trim DAC
+		#print('{:05b}'.format(chip.config.pixel_trim_dac[chan]))
+		#flipmask=int('11111',2)
+		flipmask=0b1_1111
+		chip.config.pixel_trim_dac[chan]=flipmask^chip.config.pixel_trim_dac[chan]
+		#print('{:05b}'.format(chip.config.pixel_trim_dac[chan]))
+
+		# CSA ENABLE
+		flipmask=0b1
+		chip.config.csa_enable[chan]=flipmask^chip.config.csa_enable[chan]
+
+		# CSA BYPASS SELECT
+		flipmask=0b1
+		chip.config.csa_bypass_select[chan]=flipmask^chip.config.csa_bypass_select[chan]
+
+		# CSA MONITOR SELECT
+		flipmask=0b1
+		chip.config.csa_monitor_select[chan]=flipmask^chip.config.csa_monitor_select[chan]
+
+		# CSA TESTPULSE ENABLE
+		flipmask=0b1
+		chip.config.csa_testpulse_enable[chan]=flipmask^chip.config.csa_testpulse_enable[chan]
+
+		# CHANNEL MASK
+		flipmask=0b1
+		chip.config.channel_mask[chan]=flipmask^chip.config.channel_mask[chan]
+
+		# EXTERNAL TRIGGER MASK
+		flipmask=0b1
+		chip.config.external_trigger_mask[chan]=flipmask^chip.config.external_trigger_mask[chan]
+
+		# CROSS TRIGGER MASK
+		flipmask=0b1
+		chip.config.cross_trigger_mask[chan]=flipmask^chip.config.cross_trigger_mask[chan]
+
+		# PERIODIC TRIGGER MASK
+		flipmask=0b1
+		chip.config.periodic_trigger_mask[chan]=flipmask^chip.config.periodic_trigger_mask[chan]
+
+	#print(chip.config)
+	#exit()
+
+	c.write_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	#print(verified)
+	if verified == False : # try again
+		print(returnregisters)
+		verified,returnregisters=c.verify_configuration(chip.chip_key)
+
+	if verified == False : # exit
+		#Disable chip power and interface at end
+		print("Verify config failed with flipped config")
+		powerdown_exit(c)
+
+	#invert chip config (for many registers) (returns to original)
+	# CSA GAIN
+	flipmask=0b1
+	chip.config.csa_gain=flipmask^chip.config.csa_gain
+	# CSA BYPASS ENABLE
+	flipmask=0b1
+	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
+	# BYPASS CAPS EN
+	flipmask=0b1
+	chip.config.bypass_caps_en=flipmask^chip.config.bypass_caps_en
+	# PERIODIC RESET CYCLES
+	flipmask=0xFF_FFFF
+	chip.config.periodic_reset_cycles=flipmask^chip.config.periodic_reset_cycles
+
+	for chan in range(0,NumASICchannels):
+
+		# Pixel Trim DAC
+		#print('{:05b}'.format(chip.config.pixel_trim_dac[chan]))
+		#flipmask=int('11111',2)		
+		flipmask=0b1_1111
+		chip.config.pixel_trim_dac[chan]=flipmask^chip.config.pixel_trim_dac[chan]
+		#print('{:05b}'.format(chip.config.pixel_trim_dac[chan]))
+
+		# CSA ENABLE
+		flipmask=0b1
+		chip.config.csa_enable[chan]=flipmask^chip.config.csa_enable[chan]
+
+		# CSA BYPASS SELECT
+		flipmask=0b1
+		chip.config.csa_bypass_select[chan]=flipmask^chip.config.csa_bypass_select[chan]
+
+		# CSA MONITOR SELECT
+		flipmask=0b1
+		chip.config.csa_monitor_select[chan]=flipmask^chip.config.csa_monitor_select[chan]
+
+		# CSA TESTPULSE ENABLE
+		flipmask=0b1
+		chip.config.csa_testpulse_enable[chan]=flipmask^chip.config.csa_testpulse_enable[chan]
+
+		# CHANNEL MASK
+		flipmask=0b1
+		chip.config.channel_mask[chan]=flipmask^chip.config.channel_mask[chan]
+
+		# EXTERNAL TRIGGER MASK
+		flipmask=0b1
+		chip.config.external_trigger_mask[chan]=flipmask^chip.config.external_trigger_mask[chan]
+
+		# CROSS TRIGGER MASK
+		flipmask=0b1
+		chip.config.cross_trigger_mask[chan]=flipmask^chip.config.cross_trigger_mask[chan]
+
+		# PERIODIC TRIGGER MASK
+		flipmask=0b1
+		chip.config.periodic_trigger_mask[chan]=flipmask^chip.config.periodic_trigger_mask[chan]
+
+	c.write_configuration(chip.chip_key)
+	# Global Threshold Has to be done when channels already masked off or floods the controller.
+	flipmask=0xFF
+	chip.config.threshold_global=flipmask^chip.config.threshold_global
+	c.write_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	#print(verified)
+	if verified == False : # try again
+		print(returnregisters)
+		verified,returnregisters=c.verify_configuration(chip.chip_key)
+
+	if verified == False : # exit
+		#Disable chip power and interface at end
+		print("Verify config failed with restored config")
+		powerdown_exit(c)
+
+	# Global Threshold
+	flipmask=0xFF
+	chip.config.threshold_global=flipmask^chip.config.threshold_global
+
+	print("config with flipped bits succeeded")
+
 def init_chips(c):
+	#zero supply voltages
+	c.io.set_vddd(0) # set vddd 0V
+	c.io.set_vdda(0) # set vdda 0V
+	
+	time.sleep(1)
 	#Set correct voltages
 	c.io.set_vddd() # set default vddd (~1.8V)
 	c.io.set_vdda() # set default vdda (~1.8V)
@@ -52,6 +242,18 @@ def init_chips(c):
 
 	# Enable Tile 
 	c.io.enable_tile()
+
+	# measure_currents(c)
+
+	#reset larpix chips [set sw_rst_cycles to something long, i.e. 256,1024, 
+	#set sw_rst_trig to 1, set sw_rst_trig to 0] 
+	#(this issues hard reset and syncs the pacman and larpix clocks)
+	c.io.reset_larpix(length=10240)
+	# resets uart speeds on fpga
+	for io_group, io_channels in c.network.items():
+		for io_channel in io_channels:
+			print('reset uart speed on channel',io_channel,'...')
+			c.io.set_uart_clock_ratio(io_channel, 2, io_group=io_group)
 
 	# First bring up the network using as few packets as possible
 	c.io.group_packets_by_io_group = False # this throttles the data rate to avoid FIFO collisions
@@ -80,7 +282,7 @@ def init_chips(c):
 	c.io.group_packets_by_io_group = True
 
 	chip_key
-	for chip in c.chips.values(): print(chip.config)
+	#for chip in c.chips.values(): print(chip.config)
 
 	for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
@@ -94,7 +296,15 @@ def init_chips(c):
 	print(chip.chip_key)
 	#print(chip.config)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	#print(verified)
+	if verified == False : # try again
+		verified,returnregisters=c.verify_configuration(chip.chip_key)
+
+	if verified == False : # exit
+		#Disable chip power and interface at end
+		powerdown_exit(c)
+
 	return chip
 
 def enable_channel(chan):
@@ -158,6 +368,14 @@ def ReadChannel(c,chip,chan,monitor=0):
 	print("Running chip ",chip," chan ",chan)
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.channel_mask[chan]=0  # turn ON this channel
+	#if chan < NumASICchannels-1 : 
+	#	chip.config.channel_mask[chan+1]= not TileChannelMask[chan+1]
+	#if chan < NumASICchannels-2 : 
+	#	chip.config.channel_mask[chan+2]= not TileChannelMask[chan+2]
+	#if chan < NumASICchannels-3 : 
+	#	chip.config.channel_mask[chan+3]= not TileChannelMask[chan+3]
+	#for thischan in range(0,NumASICchannels):   # turn ON ALL channels (test 20210331)
+	#	chip.config.channel_mask[thischan] = not TileChannelMask[thischan]
 	if monitor==1:
 		# Enable analog monitor on channel
 		c.enable_analog_monitor(chip.chip_key,chan)
@@ -244,12 +462,16 @@ def get_baseline_periodicselftrigger(c,chip):
 	c.logger.is_enabled()
 
 	c.verify_configuration(chip.chip_key)
-	print(chip.config)
+	#print(chip.config)
 	print("Starting ReadChannelLoop...")
 
+	Monitor = 0 # display analog mon (1) or not (0) 
 	ReadChannelLoop(c,chip,0,NumASICchannels-1,0)
 
 	print("the end")
+	textBox.config(bg="yellow")
+	doneSong.play()
+	window.update()	
 
 	c.logger.disable()
 	#c.logger.flush()
@@ -260,8 +482,20 @@ def get_baseline_periodicselftrigger(c,chip):
 	chip.config.enable_periodic_trigger=0
 	c.write_configuration(chip.chip_key)
 
-	import socket_baselines
-
+	#import socket_baselines
+	runpy.run_module(mod_name='socket_baselines')
+	nBadBaselineChannels=os.getenv('socket_BadBaselineChannels')
+	print(nBadBaselineChannels)
+	if int(nBadBaselineChannels) == 0 :
+		textBox.config(bg="green")
+		successSong.play()
+		window.update()	
+	else : 
+		textBox.config(bg="red") # flashing? 
+		sadSong.play()
+		window.update()	
+	
+	return nBadBaselineChannels
 
 def get_baseline_periodicexttrigger(c,chip):
 	# Capture Baseline for all channels
@@ -468,12 +702,13 @@ def get_ThreshLevels(c,chip):
 
 
 
-def RunTests(c,chip):
-	#Not sure how to find the mylabel object
-	#window.mybutton.configure(text='Running...')
-	#print(window.children)
-	# this depends on order buttons are created, I think
+#def RunTests(c,chip):
+def RunTests():
+
+	#Change run button to running
 	window.children['!frame'].children['!button'].configure(text='Running...')
+	#make text box red
+	textBox.config(bg="red")
 	# grey out selection boxes
 	for myiter in testCheckframe.children:
 		# print('disabling ', myiter)
@@ -483,10 +718,101 @@ def RunTests(c,chip):
 	print("Running tests for Chip SN: ",mychipIDBox[0].get())
 	ChipSN=mychipIDBox[0].get()
 
+	testID=0
+	currentTests=[]
+	for test in buttonVars:
+		currentTests.append(buttonVars[testID].get())
+		testID=testID+1
+
 	tempstatus = h5py.File("CurrentRun.tmp",mode='w')
 	dset = tempstatus.create_dataset("CurrentRun",dtype='i')
 	dset.attrs['ChipSN']=ChipSN
+	dset.attrs['currentTest']=currentTests
 	tempstatus.close()
+
+	#INIT BOARD/CHIP
+	c=init_controller()
+	#init_board(c) # defaults to channel 1
+	init_board(c,4)
+	chip=init_chips(c)	 
+	print(chip)
+
+	#test flipping bits in config register and see that they configure
+	test_config_registers(c,chip)	
+
+	#print(c.network)	
+	#for io_group, io_channels in c.network.items():
+	#	for io_channel in io_channels:
+	#		print('reset uart speed on channel',io_channel,'...')
+	#		c.io.set_uart_clock_ratio(io_channel, 2, io_group=io_group)
+	#c.reset_network(1,4)
+	c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	c=init_controller()
+	init_board(c,3)
+	chip=init_chips(c)	 
+	print(chip)	
+	c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	c=init_controller()
+	init_board(c,2)
+	chip=init_chips(c)	 
+	print(chip)	
+	c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	c=init_controller()
+	init_board(c,1)
+	chip=init_chips(c)	 
+	print(chip)	
+
+	######################################
+	#exit()
+	######################################
+	
+	# Set global threshold
+	setGlobalThresh(c,chip,100)
+
+	# Read some Data
+	#c.run(1,'test')
+	#print(c.reads[-1])
+
+	# Enable analog monitor on one channel
+	c.enable_analog_monitor(chip.chip_key,28)
+	c.write_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key)
+
+	# Turn on periodic_reset
+	#chip.config.enable_periodic_reset = 1 # turn on periodic reset
+	#c.write_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key)
+
+	# Turn off periodic_reset
+	chip.config.enable_periodic_reset = 0 # turn off periodic reset
+	# Turn on periodic_reset
+	chip.config.enable_periodic_reset = 1 # turn off periodic reset
+
+	# set a really long periodic reset (std=4096)
+	#chip.config.periodic_reset_cycles=4096 # 819us
+	#chip.config.periodic_reset_cycles=5096 # 1019us
+	chip.config.periodic_reset_cycles=100000 # 20ms
+	#chip.config.periodic_reset_cycles=1000000 # 200ms
+	#chip.config.periodic_reset_cycles=10000000 # 2s
+
+	#set ref vcm  (77 def = 0.54V)
+	chip.config.vcm_dac=45
+	#set ref vref  ( 219 def = 1.54V)
+	chip.config.vref_dac=187
+	#set ref current.  (11 for RT, 16 for cryo)
+	#chip.config.ref_current_trim=16
+	#set ibias_csa  (8 for default, range [0-15])
+	#chip.config.ibias_csa=12
+
+	c.write_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key)
+
+	# Disable analog monitor (any channel)
+	c.disable_analog_monitor(chip.chip_key)
+	c.write_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key)
+
+	# END INIT BOARD/CHIP
 
 	# Update progress boxes along the way
 	#time.sleep(10)
@@ -501,13 +827,21 @@ def RunTests(c,chip):
 		else :
 			print("Running ",testList[testID])
 			func = globals()[testFunctionNames[testID]](c,chip)
-			#func(c,chip)
+			print("Returned ",func," bad channels")
 		#	text=test,variable=buttonVars[testID],command=printStatus))
 		testID=testID+1
 
 	#run test
-	
+	#textBox.config(bg="green")	
 	#report done
+
+	#Disable chip power and interface at end
+	# Disable Tile
+	c.io.disable_tile()
+	#zero supply voltages
+	c.io.set_vddd(0) # set vddd 0V
+	c.io.set_vdda(0) # set vdda 0V
+	
 
 	# Reenable boxes
 	#testCheckframe.state(['!disabled'])
@@ -518,8 +852,25 @@ def RunTests(c,chip):
 
 	window.children['!frame'].children['!button'].configure(text='Run Test')
 
+def SNDown(): #reduce SN last digits of SN by one
+	ChipSN = mychipIDBox[0].get()
+	NumSN = int(ChipSN[2:])
+	#print(ChipSN,NumSN)
+	NumSN = NumSN -1
+	ChipSN = ChipSN[:2]+format(NumSN,"04d")
+	mychipIDBox[0].delete(0,'end')
+	mychipIDBox[0].insert(0,ChipSN)
 
-def trygui(c,chip):
+def SNUp(): # increase last digits of SN by one
+	ChipSN = mychipIDBox[0].get()
+	NumSN = int(ChipSN[2:])
+	#print(ChipSN,NumSN)
+	NumSN = NumSN +1
+	ChipSN = ChipSN[:2]+format(NumSN,"04d")
+	mychipIDBox[0].delete(0,'end')
+	mychipIDBox[0].insert(0,ChipSN)
+
+def trygui():
 	#window = tk.Tk()
 	#global runPeriodicBaseline
 	#global runBaseline
@@ -535,7 +886,8 @@ def trygui(c,chip):
 	mylabel.grid(column=0,row=0)
 	#print("mylabel is at ",str(mylabel))
 
-	mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests(c,chip))
+	#mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests(c,chip))
+	mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests())
 	#mybutton= ttk.Button(window,text="Run PeriodicBaseline")
 	#print("mybutton is at ",str(mybutton))
 	mybutton.grid(column=0,row=1)
@@ -558,26 +910,6 @@ def trygui(c,chip):
 		for ChipNum in range(1,int(numChipVar.get())+1):
 			mychipIDBox[ChipNum-1].state(['!disabled'])
 
-
-
-#	print(runPeriodicBaseline.get()," = runPeriodicBaseline")
-#	PerBaselineButton = ttk.Checkbutton(mainframe,text=
-#		"Run PerBaseline",variable=runPeriodicBaseline,command=printStatus,onvalue="1",offvalue="0")
-#	runPeriodicBaseline.set("1")
-#	print(runPeriodicBaseline.get()," = runPeriodicBaseline")
-#	runPeriodicBaseline.set("0")
-#	print(runPeriodicBaseline.get()," = runPeriodicBaseline")
-#	runPeriodicBaseline.set("1")
-#	print(runPeriodicBaseline.get()," = runPeriodicBaseline")
-#	#PerBaselineButton.state=runPeriodicBaseline
-#	PerBaselineButton.grid(column=0,row=3,sticky="W")
-
-#	print(runBaseline.get()," = runBaseline")
-#	BaselineButton = ttk.Checkbutton(mainframe,text="Run Baseline",variable=runBaseline,command=printStatus)
-#	#runBaseline=0
-#	#BaselineButton.value=0 #runBaseline
-#	BaselineButton.grid(column=0,row=4,sticky="W")
-
 	global testList,testFunctionNames
 	testList = ["Baseline Periodic SelfTrig",
 			"Baseline Ext Trig",
@@ -586,7 +918,6 @@ def trygui(c,chip):
 			"Charge Injection",
 			"Pulse Data",
 			"Analog Display"]
-	testDefaults = [1,0,0,0,0,0,0]
 	testFunctionNames = ["get_baseline_periodicselftrigger",
 				"get_baseline_periodicexttrigger",
 				"get_ThreshLevels",
@@ -595,6 +926,14 @@ def trygui(c,chip):
 				"PulseChannelLoop",
 				"AnalogDisplayLoop"]
 	testFunctions = [] 
+	#ChipSN = mychipIDBox[0].get()
+	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
+	dset = tempstatus['CurrentRun']
+	ChipSN = dset.attrs['ChipSN']
+	testDefaults = dset.attrs['currentTest']
+	tempstatus.close()
+	if len(testDefaults)==0:
+		testDefaults = [1,0,0,0,0,0,0]
 
 	global buttonVars
 	#buttonVars = [] #[len(testList)] # will hold StringVar()
@@ -621,6 +960,7 @@ def trygui(c,chip):
 	#	BaselineButton = ttk.Checkbutton(mainframe,text="Run Baseline",variable=runBaseline,command=printStatus)
 	#	BaselineButton.grid(column=0,row=5,sticky="W")
 
+	global textBox
 	textBox=tk.Text(mainframe, width = 40, height=10)
 	textBox.grid(column=9,row=2,rowspan=10)
 
@@ -632,17 +972,17 @@ def trygui(c,chip):
 	SNframe.grid(column=9,row=0,rowspan=2,sticky='E')
 	SNlabel = ttk.Label(SNframe, text="ASICs to test (1-10)")
 	SNlabel.grid(column=1,row=0)
+	SNUpBtn= ttk.Button(SNframe,text="SN Up",command=SNUp)
+	SNUpBtn.grid(column=5,row=0)
+	SNDownBtn= ttk.Button(SNframe,text="SN Down",command=SNDown)
+	SNDownBtn.grid(column=5,row=1)
 	numChipVar = tk.StringVar()
 	#numChipVar.set("2")
 	numChipWheel = tk.Spinbox(SNframe,from_=1,to=10,textvariable=numChipVar,command=deploySN)
 	numChipWheel.grid(column=1,row=1,sticky='W')
+	numChipWheel.configure(state="disabled")  # disable multi-chip testing for now
 	numChipVar.set("1")
 	deploySN()
-	#ChipSN = mychipIDBox[0].get()
-	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
-	dset = tempstatus['CurrentRun']
-	ChipSN = dset.attrs['ChipSN']
-	tempstatus.close()
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
 	# seems that deploySN has to happen after first window paint
 	# this makes it interactive?
@@ -651,10 +991,11 @@ def trygui(c,chip):
 
 def mainish():
 
-	#trygui()
+	trygui() 
 	
-	#exit()
+	exit()
 	
+	# this code was moved to runtests for personnel efficiency
 	c=init_controller()
 	init_board(c)
 	chip=init_chips(c)	
