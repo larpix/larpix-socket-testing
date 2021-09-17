@@ -870,29 +870,31 @@ def SNUp(): # increase last digits of SN by one
 	mychipIDBox[0].delete(0,'end')
 	mychipIDBox[0].insert(0,ChipSN)
 
+def SNAutoUp(): # Set Button to increase last digits of SN by one at end of test
+	# Toggle 
+	print("SNAutoIncrement=",SNAutoIncrement.get())
+
+def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end of test
+	# Toggle 
+	print("UseTCPIPControl=",UseTCPIPControlState.get())
+
 def trygui():
 	#window = tk.Tk()
 	#global runPeriodicBaseline
 	#global runBaseline
-	mainframe = ttk.Frame(window, padding="3 3 12 12")
+	mainframe = ttk.Frame(window, padding="5") # padding at edge of window
 	mainframe.grid(column=0, row=0, sticky=("N, W, E, S"))
-	window.columnconfigure(0, weight=1,uniform='a')
-	window.rowconfigure(0, weight=1,uniform='a')
+	#window.columnconfigure(0, weight=1,uniform='a')
+	#window.rowconfigure(0, weight=1,uniform='a')
 	window.title("ASIC Testing Controller")
-	window.geometry('+100+100')
-	#print("Window is at ",str(window))
+	window.geometry('+100+50')
 
 	mylabel = ttk.Label(mainframe, text="ASIC testing")
 	mylabel.grid(column=0,row=0)
-	#print("mylabel is at ",str(mylabel))
 
-	#mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests(c,chip))
+
 	mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests())
-	#mybutton= ttk.Button(window,text="Run PeriodicBaseline")
-	#print("mybutton is at ",str(mybutton))
 	mybutton.grid(column=0,row=1)
-
-	print("trygui")
 
 	global mychipIDBox
 	mychipIDBox = []
@@ -901,8 +903,9 @@ def trygui():
 		if int(numChipVar.get()) > len(mychipIDBox):
 			for ChipNum in range(len(mychipIDBox)+1,int(numChipVar.get())+1):
 				print(ChipNum)
-				mychipIDBox.append(ttk.Entry(SNframe,width=6))
-				mychipIDBox[ChipNum-1].grid(column=4,row=ChipNum,sticky='E') 
+				mychipIDBox.append(ttk.Entry(SNframe,width=8))
+				mychipIDBox[ChipNum-1].grid(column=4,
+					row=ChipNum,sticky='E',padx=10) 
 		if int(numChipVar.get()) < len(mychipIDBox):
 			for ChipNum in range(len(mychipIDBox),int(numChipVar.get()),-1):
 				print(ChipNum)
@@ -926,7 +929,7 @@ def trygui():
 				"PulseChannelLoop",
 				"AnalogDisplayLoop"]
 	testFunctions = [] 
-	#ChipSN = mychipIDBox[0].get()
+
 	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
 	dset = tempstatus['CurrentRun']
 	ChipSN = dset.attrs['ChipSN']
@@ -942,7 +945,7 @@ def trygui():
 	testID=0
 	#print(len(testList))
 	global testCheckframe 
-	testCheckframe = ttk.Frame(mainframe,padding="3 3 12 12")
+	testCheckframe = ttk.Frame(mainframe,padding="10")
 	testCheckframe.grid(column=0,row=5)
 	row=0	
 	for test in testList:
@@ -956,10 +959,6 @@ def trygui():
 		row = row+1
 		testID=testID+1
 
-	#	print(runBaseline.get()," = runBaseline")
-	#	BaselineButton = ttk.Checkbutton(mainframe,text="Run Baseline",variable=runBaseline,command=printStatus)
-	#	BaselineButton.grid(column=0,row=5,sticky="W")
-
 	global textBox
 	textBox=tk.Text(mainframe, width = 40, height=10)
 	textBox.grid(column=9,row=2,rowspan=10)
@@ -968,19 +967,34 @@ def trygui():
 	closebutton.grid(column=9,row=99,sticky='E')
 	#print("closebutton is at ",str(closebutton))
 
-	SNframe = ttk.Frame(mainframe, padding="3 3 12 12")
+	SNframe = ttk.Frame(mainframe, padding="5")
 	SNframe.grid(column=9,row=0,rowspan=2,sticky='E')
-	SNlabel = ttk.Label(SNframe, text="ASICs to test (1-10)")
-	SNlabel.grid(column=1,row=0)
+	#SNlabel = ttk.Label(SNframe, text="ASICs to test (1-10)")
+	#SNlabel.grid(column=1,row=0)
+
+	global UseTCPIPControlState
+	UseTCPIPControlState=tk.StringVar()
+	UseTCPIPControlState.set(0)
+	UseTCPIPControlBtn= ttk.Checkbutton(SNframe,text="Use TCPIP\nControl",
+		variable=UseTCPIPControlState, command=UseTCPIPControl)
+	UseTCPIPControlBtn.grid(column=3,row=0,padx=20)
+
+	global SNAutoIncrement
+	SNAutoIncrement=tk.StringVar()
+	SNAutoIncrement.set(0)
+	SNAutoUpBtn= ttk.Checkbutton(SNframe,text="SN AutoUp",
+		variable=SNAutoIncrement, command=SNAutoUp)
+	SNAutoUpBtn.grid(column=4,row=0,padx=10)
+
 	SNUpBtn= ttk.Button(SNframe,text="SN Up",command=SNUp)
 	SNUpBtn.grid(column=5,row=0)
 	SNDownBtn= ttk.Button(SNframe,text="SN Down",command=SNDown)
 	SNDownBtn.grid(column=5,row=1)
 	numChipVar = tk.StringVar()
 	#numChipVar.set("2")
-	numChipWheel = tk.Spinbox(SNframe,from_=1,to=10,textvariable=numChipVar,command=deploySN)
-	numChipWheel.grid(column=1,row=1,sticky='W')
-	numChipWheel.configure(state="disabled")  # disable multi-chip testing for now
+	#numChipWheel = tk.Spinbox(SNframe,from_=1,to=10,textvariable=numChipVar,command=deploySN)
+	#numChipWheel.grid(column=1,row=1,sticky='W')
+	#numChipWheel.configure(state="disabled")  # disable multi-chip testing for now
 	numChipVar.set("1")
 	deploySN()
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
