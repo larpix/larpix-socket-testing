@@ -700,7 +700,19 @@ def get_ThreshLevels(c,chip):
 	#RateThreshFrame.to_csv("RateThresh.csv",mode='a',header=False)
 	RateThreshFrame.to_hdf("RateThresh.h5",mode='a',key='RateVsThreshV1')
 
+def RunControl():
 
+	if UseTCPIPControlState.get() == 0 :      # TCPIPControl is not checked, just RunTests()
+		RunTests()  # Single chip test mode
+	else :
+		window.children['!frame'].children['!button'].configure(text='Running TCPIPcontrol...')
+		# Start the server
+			# Load a chip
+			# Run Tests
+			# Send results to Chip Handler
+			# Get another chip (what happens after 180 tests?)
+		# Close the server
+		return
 
 #def RunTests(c,chip):
 def RunTests():
@@ -841,7 +853,10 @@ def RunTests():
 	#zero supply voltages
 	c.io.set_vddd(0) # set vddd 0V
 	c.io.set_vdda(0) # set vdda 0V
-	
+
+	# Increment SN if check box enabled
+	if SNAutoIncrement.get() == 1 :
+		SNUp()
 
 	# Reenable boxes
 	#testCheckframe.state(['!disabled'])
@@ -893,7 +908,7 @@ def trygui():
 	mylabel.grid(column=0,row=0)
 
 
-	mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunTests())
+	mybutton= ttk.Button(mainframe,text="Run Tests",command= lambda:RunControl())
 	mybutton.grid(column=0,row=1)
 
 	global mychipIDBox
