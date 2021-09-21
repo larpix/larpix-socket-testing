@@ -15,6 +15,10 @@ import h5py
 import pandas as pd
 import runpy
 import simpleaudio as sa
+import tcp_server_prod as tsp
+#import t
+
+#DumbFunc('another one')
 
 sadSong = sa.WaveObject.from_wave_file('sounds/Sad_Trombone-Joe_Lamb-665429450.wav')
 successSong = sa.WaveObject.from_wave_file('sounds/TaDaSoundBible.com-1884170640.wav')
@@ -701,15 +705,56 @@ def get_ThreshLevels(c,chip):
 	RateThreshFrame.to_hdf("RateThresh.h5",mode='a',key='RateVsThreshV1')
 
 def RunControl():
+	HOST = '192.168.12.138'  # apdlab pc interface address 
+	PORT = 38630        # Port to listen on (non-privileged ports are > 1023)
 
-	if UseTCPIPControlState.get() == 0 :      # TCPIPControl is not checked, just RunTests()
+	Hello='H\r'
+	Start='S\r'
+	Ready='R\r'
+	EOL='EOL\r'
+	Result1='1\r'
+	Result2='2\r'
+	Result3='3\r'
+	Result4='4\r'
+	Result5='5\r'
+	Result6='6\r'
+	Result7='7\r'
+	Result8='8\r'
+	Result9='9\r'
+
+	if UseTCPIPControlState.get() == 0 :  # if TCPIPControl is not checked, just RunTests()
 		RunTests()  # Single chip test mode
 	else :
 		window.children['!frame'].children['!button'].configure(text='Running TCPIPcontrol...')
+		tsp.DumbFunc('in RunControl')
 		# Start the server
+		print('Starting TCPIP server connection')
+		conn, addr = tsp.OpenSocketConn(HOST,PORT)
+		while True : 
+			message = tsp.CheckSocketForData(conn)
+			if message == bytes(Hello,"utf-8") :
+				print('Received Hello from Chip Handler')
+				#Send Ready (or EOL) back
+				print('Sending Ready to Chip Handler')
+				conn.sendall(bytes(Ready,"utf-8"))
 			# Load a chip
-			# Run Tests
-			# Send results to Chip Handler
+			# Wait for Start
+			message = tsp.CheckSocketForData(conn)
+			if message == bytes(Start,"utf-8") :
+				print('Received Start from Chip Handler')
+				#Send Ready (or EOL) back
+				print('Starting tests')
+				# Run Tests
+				#ResultNum=RunTests() 
+				time.sleep(5)
+				ResultNum=0 # Fake result for testing
+				# Send results to Chip Handler
+				if ResultNum == 0 : 
+					print('Result was ',ResultNum,' sending ',Result1)
+					conn.sendall(bytes(Result1,"utf-8"))
+				else: 
+					print('Result was ',ResultNum,' sending ',Result2)
+					conn.sendall(bytes(Result2,"utf-8"))
 			# Get another chip (what happens after 180 tests?)
 		# Close the server
 		return
