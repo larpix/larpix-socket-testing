@@ -50,16 +50,30 @@ def init_controller():
 def init_board(c,io_chan=1):
 	#c.load('../configs/controller/pcb-3_chip_info.json')
 	#c.load('../configs/controller/socket-board-v1.json')
-	if io_chan==1:
-		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_1.json')
-	elif io_chan==2:
-		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_2.json')
-	elif io_chan==3:
-		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_3.json')
-	elif io_chan==4:
-		c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_4.json')
-	else:
-		exit('bad IO channel specified')
+	if v2bState.get() == '0':
+		if io_chan==1:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_1.json')
+		elif io_chan==2:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_2.json')
+		elif io_chan==3:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_3.json')
+		elif io_chan==4:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_4.json')
+		else:
+			exit('bad IO channel specified')
+	elif v2bState.get() == '1':
+		if io_chan==1:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_1.json')
+		elif io_chan==2:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_2.json')
+		elif io_chan==3:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_3.json')
+		elif io_chan==4:
+			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_4.json')
+		else:
+			exit('bad IO channel specified')
+	else : 
+		exit('could not determine v2bState')
 
 	c.io.ping()
 
@@ -265,18 +279,22 @@ def init_chips(c):
 		for io_channel in io_channels:
 			print("io_group,io_channel:",io_group,",",io_channel)
 			#c.init_network(io_group, io_channel)
-			c.init_network(io_group, io_channel,differential='True')
+			if v2bState.get() == '0':
+				c.init_network(io_group, io_channel,differential='True')
+			if v2bState.get() == '1':
+				c.init_network(io_group, io_channel)#,differential=False)
 
-	# Configure the IO for a slower UART and differential signaling
-	c.io.double_send_packets = True # double up packets to avoid 512 bug when configuring
-	for io_group, io_channels in c.network.items():
-		for io_channel in io_channels:
-			chip_keys = c.get_network_keys(io_group,io_channel,root_first_traversal=False)
-			for chip_key in chip_keys:
-				c[chip_key].config.clk_ctrl = 1
-				#c[chip_key].config.enable_miso_differential = [1,1,1,1]
-				#c.write_configuration(chip_key, 'enable_miso_differential')
-				c.write_configuration(chip_key, 'clk_ctrl')
+	if v2bState.get() == '0':
+		# Configure the IO for a slower UART and differential signaling
+		c.io.double_send_packets = True # double up packets to avoid 512 bug when configuring
+		for io_group, io_channels in c.network.items():
+			for io_channel in io_channels:
+				chip_keys = c.get_network_keys(io_group,io_channel,root_first_traversal=False)
+				for chip_key in chip_keys:
+					c[chip_key].config.clk_ctrl = 1
+					#c[chip_key].config.enable_miso_differential = [1,1,1,1]
+					#c.write_configuration(chip_key, 'enable_miso_differential')
+					c.write_configuration(chip_key, 'clk_ctrl')
 
 	for io_group, io_channels in c.network.items():
 		for io_channel in io_channels:
@@ -487,6 +505,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	c.write_configuration(chip.chip_key)
 
 	#import socket_baselines
+	os.environ['socket_PlotBaselineChannels']=LoadHTMLplotsState.get()
 	runpy.run_module(mod_name='socket_baselines')
 	nBadBaselineChannels=os.getenv('socket_BadBaselineChannels')
 	print(nBadBaselineChannels)
@@ -722,8 +741,12 @@ def RunControl():
 	Result8='8\r'
 	Result9='9\r'
 
-	if UseTCPIPControlState.get() == 0 :  # if TCPIPControl is not checked, just RunTests()
-		RunTests()  # Single chip test mode
+	if UseTCPIPControlState.get() == '0' :  # if TCPIPControl is not checked, just RunTests()
+		totalBadChannels = RunTests()  # Single chip test mode
+		# Increment SN if check box enabled
+		if SNAutoIncrement.get() == '1' :
+			SNUp()
+
 	else :
 		window.children['!frame'].children['!button'].configure(text='Running TCPIPcontrol...')
 		tsp.DumbFunc('in RunControl')
@@ -745,9 +768,9 @@ def RunControl():
 				#Send Ready (or EOL) back
 				print('Starting tests')
 				# Run Tests
-				#ResultNum=RunTests() 
-				time.sleep(5)
-				ResultNum=0 # Fake result for testing
+				ResultNum=RunTests() 
+				#time.sleep(5)
+				#ResultNum=0 # Fake result for testing
 				# Send results to Chip Handler
 				if ResultNum == 0 : 
 					print('Result was ',ResultNum,' sending ',Result1)
@@ -756,6 +779,9 @@ def RunControl():
 					print('Result was ',ResultNum,' sending ',Result2)
 					conn.sendall(bytes(Result2,"utf-8"))
 			# Get another chip (what happens after 180 tests?)
+			# Increment SN if check box enabled
+			if SNAutoIncrement.get() == '1' :
+				SNUp()
 		# Close the server
 		return
 
@@ -875,6 +901,7 @@ def RunTests():
 	#time.sleep(10)
 	#find checkboxes that are enabled and run test
 	testID=0
+	totalBadChannels=0
 	for test in testList:
 		#testFunctions.append(testFunctionNames[testID])
 		#print(test)
@@ -885,6 +912,7 @@ def RunTests():
 			print("Running ",testList[testID])
 			func = globals()[testFunctionNames[testID]](c,chip)
 			print("Returned ",func," bad channels")
+			totalBadChannels=totalBadChannels+int(func)
 		#	text=test,variable=buttonVars[testID],command=printStatus))
 		testID=testID+1
 
@@ -899,10 +927,6 @@ def RunTests():
 	c.io.set_vddd(0) # set vddd 0V
 	c.io.set_vdda(0) # set vdda 0V
 
-	# Increment SN if check box enabled
-	if SNAutoIncrement.get() == 1 :
-		SNUp()
-
 	# Reenable boxes
 	#testCheckframe.state(['!disabled'])
 	for myiter in testCheckframe.children:
@@ -911,6 +935,7 @@ def RunTests():
 		window.update()
 
 	window.children['!frame'].children['!button'].configure(text='Run Test')
+	return totalBadChannels
 
 def SNDown(): #reduce SN last digits of SN by one
 	ChipSN = mychipIDBox[0].get()
@@ -932,11 +957,13 @@ def SNUp(): # increase last digits of SN by one
 
 def SNAutoUp(): # Set Button to increase last digits of SN by one at end of test
 	# Toggle 
-	print("SNAutoIncrement=",SNAutoIncrement.get())
+	#print("SNAutoIncrement=",SNAutoIncrement.get())
+	return
 
 def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end of test
 	# Toggle 
-	print("UseTCPIPControl=",UseTCPIPControlState.get())
+	#print("UseTCPIPControl=",UseTCPIPControlState.get())
+	return
 
 def trygui():
 	#window = tk.Tk()
@@ -1038,6 +1065,21 @@ def trygui():
 	UseTCPIPControlBtn= ttk.Checkbutton(SNframe,text="Use TCPIP\nControl",
 		variable=UseTCPIPControlState, command=UseTCPIPControl)
 	UseTCPIPControlBtn.grid(column=3,row=0,padx=20)
+
+	global LoadHTMLplotsState
+	LoadHTMLplotsState=tk.StringVar()
+	LoadHTMLplotsState.set(0)
+	LoadHTMLplotsBtn= ttk.Checkbutton(SNframe,text="Load HTML\nplot",
+		variable=LoadHTMLplotsState) #, command=LoadHTMLplots)
+	LoadHTMLplotsBtn.grid(column=3,row=1,padx=20)
+
+	global v2bState
+	v2bState=tk.StringVar()
+	v2bState.set(0)
+	v2bBtn= ttk.Checkbutton(SNframe,text="v2b ASIC",
+		variable=v2bState) #, command=v2b)
+	v2bBtn.grid(column=3,row=2,padx=20)
+
 
 	global SNAutoIncrement
 	SNAutoIncrement=tk.StringVar()

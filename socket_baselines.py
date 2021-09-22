@@ -99,9 +99,11 @@ tempstatus.close()
 
 fig = px.histogram(datachunk,x='dataword',color='channel_id',log_y=True,opacity=0.6)
 fig.update_layout(barmode='overlay')
-fig.show()	
+if os.getenv('socket_PlotBaselineChannels')=='1':
+	fig.show()	
 
-plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
+#plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
+fig.write_html("baselines/Baseline_"+ChipSN+".html",auto_open=False )
 
 BaselineLoop(datachunk,0,NumASICchannels-1)
 
