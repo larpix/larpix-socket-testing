@@ -25,9 +25,17 @@ successSong = sa.WaveObject.from_wave_file('sounds/TaDaSoundBible.com-1884170640
 doneSong = sa.WaveObject.from_wave_file('sounds/service-bell_daniel_simion.wav')
 
 NumASICchannels = 64
-DisabledChannels = [6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
+
+def setv2channelmask():
+	DisabledChannels = [6,7,8,9,22,23,24,25,38,39,40,54,55,56,57]
+	for chan in DisabledChannels: TileChannelMask[chan]=0
+
 TileChannelMask = [1] * NumASICchannels
-for chan in DisabledChannels: TileChannelMask[chan]=0
+#To enable only a few channels, set [0] above and list channel in EnabledChannels
+# and uncomment the 2 lines below. To enable all channels do the reverse, set [1]
+# and comment out the 2 lines below.
+#EnabledChannels = [10,19,20,21,22,23,24,40]
+#for chan in EnabledChannels: TileChannelMask[chan]=1
 
 TileChannelMask 
 
@@ -62,6 +70,16 @@ def init_board(c,io_chan=1):
 		else:
 			exit('bad IO channel specified')
 	elif v2bState.get() == '1':
+		_default_chip_id=2
+		_default_miso_ds = io_chan-1
+		_default_mosi = io_chan-1
+		#print('loading v2b json file')
+		c.add_chip(larpix.Key(1, io_chan, _default_chip_id),version='2b')
+		c.add_network_node(1, io_chan, c.network_names, 'ext', root=True)
+		c.add_network_link(1, io_chan, 'miso_us', ('ext',_default_chip_id), 0)
+		c.add_network_link(1, io_chan, 'miso_ds', (_default_chip_id,'ext'), _default_miso_ds)
+		c.add_network_link(1, io_chan, 'mosi', ('ext', _default_chip_id), _default_mosi)
+		'''
 		if io_chan==1:
 			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_1.json')
 		elif io_chan==2:
@@ -72,6 +90,7 @@ def init_board(c,io_chan=1):
 			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_4.json')
 		else:
 			exit('bad IO channel specified')
+		'''
 	else : 
 		exit('could not determine v2bState')
 
@@ -95,6 +114,19 @@ def powerdown_exit(c):
 	c.io.set_vddd(0) # set vddd 0V
 	c.io.set_vdda(0) # set vdda 0V
 	exit()
+
+def powerdown(c):
+	#Disable chip power and interface at end
+	# Disable Tile
+	c.io.disable_tile()
+	#zero supply voltages
+	c.io.set_vddd(0) # set vddd 0V
+	c.io.set_vdda(0) # set vdda 0V
+	
+
+def wait_here():
+	trash=input('Hit <ENTER> key to proceed')
+	
 
 #test flipping bits in config register and see that they configure
 def test_config_registers(c,chip):
@@ -167,7 +199,8 @@ def test_config_registers(c,chip):
 	if verified == False : # exit
 		#Disable chip power and interface at end
 		print("Verify config failed with flipped config")
-		powerdown_exit(c)
+		#powerdown(c)
+		return 2
 
 	#invert chip config (for many registers) (returns to original)
 	# CSA GAIN
@@ -238,13 +271,15 @@ def test_config_registers(c,chip):
 	if verified == False : # exit
 		#Disable chip power and interface at end
 		print("Verify config failed with restored config")
-		powerdown_exit(c)
+		#powerdown(c)
+		return 1
 
 	# Global Threshold
 	flipmask=0xFF
 	chip.config.threshold_global=flipmask^chip.config.threshold_global
 
 	print("config with flipped bits succeeded")
+	return 0
 
 def init_chips(c):
 	#zero supply voltages
@@ -261,28 +296,126 @@ def init_chips(c):
 	# Enable Tile 
 	c.io.enable_tile()
 
-	# measure_currents(c)
+	# measure_currents and voltage
+	vddd,iddd = c.io.get_vddd()[1]
+	vdda,idda = c.io.get_vdda()[1]
+	print('VDDD:',vddd,'mV')
+	print('IDDD:',iddd,'mA')
+	print('VDDA:',vdda,'mV')
+	print('IDDA:',idda,'mA')
+
+	_uart_phase = 0
+	for ch in range(1,5):
+		c.io.set_reg(0x1000*ch + 0x2014, _uart_phase)
+		print('set phase:',_uart_phase)
+
 
 	#reset larpix chips [set sw_rst_cycles to something long, i.e. 256,1024, 
 	#set sw_rst_trig to 1, set sw_rst_trig to 0] 
 	#(this issues hard reset and syncs the pacman and larpix clocks)
 	c.io.reset_larpix(length=10240)
 	# resets uart speeds on fpga
+	#print('c.network.items()= ',c.network.items())
+	#if v2bState.get() == '0':
 	for io_group, io_channels in c.network.items():
 		for io_channel in io_channels:
-			print('reset uart speed on channel',io_channel,'...')
+			print('set uart speed on channel',io_channel,'...')
 			c.io.set_uart_clock_ratio(io_channel, 2, io_group=io_group)
 
 	# First bring up the network using as few packets as possible
 	c.io.group_packets_by_io_group = False # this throttles the data rate to avoid FIFO collisions
+	c.network.items()
+
+	#if False: 
 	for io_group, io_channels in c.network.items():
+		#io_channels
 		for io_channel in io_channels:
 			print("io_group,io_channel:",io_group,",",io_channel)
-			#c.init_network(io_group, io_channel)
-			if v2bState.get() == '0':
-				c.init_network(io_group, io_channel,differential='True')
-			if v2bState.get() == '1':
-				c.init_network(io_group, io_channel)#,differential=False)
+			c.init_network(io_group, io_channel,differential='True')
+			#if v2bState.get() == '0':
+			#c.init_network(io_group, io_channel,differential='True')
+			#if v2bState.get() == '1':
+			#c.init_network(io_group, io_channel,differential=True)
+			print('Finished init_network')
+
+	if False:  # A test for success of making init_network
+		io_group=1
+		io_channel=4
+		print("io_group,io_channel:",io_group,",",io_channel)
+		c.init_network(io_group, io_channel)
+
+	#print(list(c.network[1][4]['miso_ds'].edges()))
+	#print(list(c.network[1][4]['miso_us'].edges()))
+	#print(list(c.network[1][4]['mosi'].edges()))
+	#exit()
+	# Brooke Power_up_network.py
+	if v2bState.get() == '1' : 
+		#c = larpix.Controller()
+		#print('here')
+		#c.io = larpix.io.PACMAN_IO(relaxed=True)
+		#print('make network')
+		#if controller_config is None:
+		#	c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id),version='2b')
+		#	c.add_network_node(1, _default_io_channel, c.network_names, 'ext', root=True)
+		#	c.add_network_link(1, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
+		#	c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'), _default_miso_ds)
+		#	c.add_network_link(1, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
+		#else:
+		#	c.load(controller_config)
+
+		#if reset:
+		#	c.io.reset_larpix(length=10240)
+			# resets uart speeds on fpga
+		#for io_group, io_channels in c.network.items():
+		#		for io_channel in io_channels:
+		#			c.io.set_uart_clock_ratio(io_channel, clk_ctrl_2_clk_ratio_map[0], io_group=io_group)
+
+		'''  Was forced in Brooke's startup.  No longer needed, as controller.py should do it.
+		for chip_key, chip in reversed(c.chips.items()):
+			c[chip_key].config.enable_piso_downstream = [0,0,0,1]
+			c[chip_key].config.i_tx_diff3=0
+			c[chip_key].config.tx_slices3=15
+    
+			c.write_configuration(chip_key,125)
+			c.write_configuration(chip_key,'i_tx_diff3')
+			c.write_configuration(chip_key,'tx_slices3')
+		'''
+               
+		#print('Brooke power up complete')
+		#print('Writing configuration')
+		#while True:
+		for chip in c.chips.values(): c.write_configuration(chip.chip_key)
+
+		for chip in c.chips.values(): 
+			verified,returnregisters=c.verify_configuration(chip.chip_key)
+			print(verified,returnregisters)
+
+		'''  Used during setup, not needed regularly
+		while verified == False: 
+			chip = list(c.chips.values())[0] # selects 1st chip in chain
+			print('Trying again on ',chip)
+			print('with config= ',chip.config)
+			#c[chip_key].config.enable_posi = [1,1,1,1]
+			#c[chip_key].config.test_mode_uart0 = 1
+			#c[chip_key].config.test_mode_uart1 = 1
+			#c[chip_key].config.test_mode_uart2 = 1
+			#c[chip_key].config.test_mode_uart3 = 1
+			#c[chip_key].config.v_cm_lvds_tx0 = 0
+			#c[chip_key].config.v_cm_lvds_tx1 = 0
+			#c[chip_key].config.v_cm_lvds_tx2 = 0
+			#c[chip_key].config.v_cm_lvds_tx3 = 0
+			c.io.reset_larpix(length=10240)
+			c.write_configuration(chip.chip_key)
+			verified,returnregisters=c.verify_configuration(chip.chip_key)
+			print(verified,returnregisters)
+			print('Tried at ',time.strftime("%H:%M:%S"))
+			#time.sleep(20)
+			wait_here()
+		'''
+
+		#exit()
+		#return c
+
 
 	if v2bState.get() == '0':
 		# Configure the IO for a slower UART and differential signaling
@@ -290,22 +423,36 @@ def init_chips(c):
 		for io_group, io_channels in c.network.items():
 			for io_channel in io_channels:
 				chip_keys = c.get_network_keys(io_group,io_channel,root_first_traversal=False)
+				chip_keys
 				for chip_key in chip_keys:
 					c[chip_key].config.clk_ctrl = 1
-					#c[chip_key].config.enable_miso_differential = [1,1,1,1]
-					#c.write_configuration(chip_key, 'enable_miso_differential')
+					c[chip_key].config.enable_miso_differential = [1,1,1,1]
+					c.write_configuration(chip_key, 'enable_miso_differential')
 					c.write_configuration(chip_key, 'clk_ctrl')
 
-	for io_group, io_channels in c.network.items():
-		for io_channel in io_channels:
-			c.io.set_uart_clock_ratio(io_channel, 4, io_group=io_group)
+		#if v2bState.get() == '0':
+		for io_group, io_channels in c.network.items():
+			for io_channel in io_channels:
+				c.io.set_uart_clock_ratio(io_channel, 4, io_group=io_group)
 
-	c.io.double_send_packets = False
-	c.io.group_packets_by_io_group = True
+		c.io.double_send_packets = False
+		c.io.group_packets_by_io_group = True
 
-	chip_key
 	#for chip in c.chips.values(): print(chip.config)
 
+	# Stolen from Brooke, power_up_network.py
+	if False:
+		for chip_key, chip in reversed(c.chips.items()):
+			c[chip_key].config.enable_piso_downstream = [0,0,0,1]
+			c[chip_key].config.i_tx_diff3=0
+			c[chip_key].config.tx_slices3=15
+			c.write_configuration(chip_key,125)
+			c.write_configuration(chip_key,'i_tx_diff3')
+			c.write_configuration(chip_key,'tx_slices3')
+
+
+	print('Writing configuration')
+	#while True: 
 	for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
 	for chip in c.chips.values(): c.verify_configuration(chip.chip_key)
@@ -319,14 +466,18 @@ def init_chips(c):
 	#print(chip.config)
 	c.write_configuration(chip.chip_key)
 	verified,returnregisters=c.verify_configuration(chip.chip_key)
-	#print(verified)
 	if verified == False : # try again
+		print(verified,returnregisters)
 		verified,returnregisters=c.verify_configuration(chip.chip_key)
 
 	if verified == False : # exit
+		print(verified,returnregisters)
 		#Disable chip power and interface at end
-		powerdown_exit(c)
+		print('Configuration failed, exiting')
+		#powerdown(c)
+		return
 
+	print('Finished configuring chip ',chip)
 	return chip
 
 def enable_channel(chan):
@@ -349,7 +500,8 @@ def setGlobalThresh(c,chip,Thresh=50):
 def AnalogDisplayLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1):
 	for chan in range(firstChan,lastChan+1):
 		AnalogDisplay(c,chip,chan)
-		time.sleep(5)
+		time.sleep(10)
+		wait_here()
 
 # set a really long periodic reset (std=4096, this is 1M)
 #chip.config.reset_cycles=1000000
@@ -375,6 +527,7 @@ def AnalogDisplay(c,chip,chan):
 def ReadChannelLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1,monitor=0):
 	#sleeptime=0.1
 	#c.start_listening()
+	#for chan in reversed(range(firstChan,lastChan+1)): # used for a test
 	for chan in range(firstChan,lastChan+1):
 		#print("Running chip ",chip," chan ",chan)
 		if TileChannelMask[chan]!=0: 
@@ -382,6 +535,7 @@ def ReadChannelLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1,monitor=0):
 		#time.sleep(sleeptime)
 	#c.stop_listening()
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
+	chip.config.periodic_trigger_mask = [1] * NumASICchannels  # Turn off all channels
 	c.write_configuration(chip.chip_key)
 
 
@@ -390,6 +544,8 @@ def ReadChannel(c,chip,chan,monitor=0):
 	print("Running chip ",chip," chan ",chan)
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.channel_mask[chan]=0  # turn ON this channel
+	chip.config.periodic_trigger_mask = [1] * NumASICchannels  
+	chip.config.periodic_trigger_mask[chan]=0  # turn ON this channel
 	#if chan < NumASICchannels-1 : 
 	#	chip.config.channel_mask[chan+1]= not TileChannelMask[chan+1]
 	#if chan < NumASICchannels-2 : 
@@ -403,6 +559,10 @@ def ReadChannel(c,chip,chan,monitor=0):
 		c.enable_analog_monitor(chip.chip_key,chan)
 		print("Running Analog mon for Pulser on channel ",chan)
 	c.write_configuration(chip.chip_key)
+	print('***************************************')
+	print('****      READ CHANNEL             ****')
+	print('***************************************')
+	#print(chip.config)
 	#c.verify_configuration(chip.chip_key)
 	loop=0
 	looplimit=1
@@ -411,6 +571,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 		c.run(0.1,'test')
 		#print(c.reads[-1])
 		print("read ",len(c.reads[-1])," packets")
+		#wait_here()
 		loop=loop+1
 
 
@@ -455,7 +616,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	chip.config.enable_periodic_reset = 1 
 	#chip.config.periodic_reset_cycles = 1000000 
 	# Reduce global threshold to get baseline data
-	chip.config.threshold_global=250 
+	chip.config.threshold_global=255 
 	# Extend the time for conversion as long as possible
 	#chip.config.sample_cycles=150
 	#chip.config.sample_cycles=1 #(set to default starting 2/21/2020)
@@ -464,31 +625,34 @@ def get_baseline_periodicselftrigger(c,chip):
 	#chip.config.adc_hold_delay=1 #(set to default starting 2/21/2020)
 	# enable periodic trigger
 	chip.config.enable_periodic_trigger=1
-	chip.config.periodic_trigger_mask= [0] * NumASICchannels
+	chip.config.periodic_trigger_mask= [1] * NumASICchannels  # Turn off all channels
+	# swapped line above 0 (on) to 1 (off) on 17-NOV-2021 LMM
+	# I suspect this was causing the leakage.  Different behavior v2 and v2b with masking.
 	chip.config.enable_hit_veto = 0
 	# set trigger period (100ns*period_trigger_cycles)
 	chip.config.periodic_trigger_cycles=1000 # 1k = 0.1ms
 	#chip.config.periodic_trigger_cycles=10000 # 10k = 1ms
 	#chip.config.periodic_trigger_cycles=20000 # 20k = 2ms
 	#chip.config.periodic_trigger_cycles=100000 # 100k = 10ms
+	#chip.config.periodic_trigger_cycles=7500000 # 750k = 75ms
 	#chip.config.periodic_trigger_cycles=1000000 # 1000k = 100ms
 	c.write_configuration(chip.chip_key)
 	c.verify_configuration(chip.chip_key)
 
 	subprocess.run(["rm","testing.h5"])
 
-	#logger declared and switched enabledc.
+	#logger declared and switched enabled.
 	c.logger = HDF5Logger("testing.h5", buffer_length=1000000)
 	#c.logger = HDF5Logger("testing.h5", buffer_length=10000)
 	c.logger.enable()
 	c.logger.is_enabled()
 
-	c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key)
 	#print(chip.config)
 	print("Starting ReadChannelLoop...")
 
 	Monitor = 0 # display analog mon (1) or not (0) 
-	ReadChannelLoop(c,chip,0,NumASICchannels-1,0)
+	ReadChannelLoop(c,chip,0,NumASICchannels-1,Monitor)
 
 	print("the end")
 	textBox.config(bg="yellow")
@@ -731,6 +895,7 @@ def RunControl():
 	Start='S\r'
 	Ready='R\r'
 	EOL='EOL\r'
+	Result0='0\r'
 	Result1='1\r'
 	Result2='2\r'
 	Result3='3\r'
@@ -749,7 +914,7 @@ def RunControl():
 
 	else :
 		window.children['!frame'].children['!button'].configure(text='Running TCPIPcontrol...')
-		tsp.DumbFunc('in RunControl')
+		#tsp.DumbFunc('in RunControl')
 		# Start the server
 		print('Starting TCPIP server connection')
 		conn, addr = tsp.OpenSocketConn(HOST,PORT)
@@ -775,6 +940,9 @@ def RunControl():
 				if ResultNum == 0 : 
 					print('Result was ',ResultNum,' sending ',Result1)
 					conn.sendall(bytes(Result1,"utf-8"))
+				if ResultNum < 0 : 
+					print('Result was ',ResultNum,' sending ',Result3)
+					conn.sendall(bytes(Result3,"utf-8"))
 				else: 
 					print('Result was ',ResultNum,' sending ',Result2)
 					conn.sendall(bytes(Result2,"utf-8"))
@@ -798,6 +966,8 @@ def RunTests():
 		testCheckframe.children[myiter].state(['disabled'])
 		window.update()
 
+
+	if v2bState.get() == '0': setv2channelmask()
 	print("Running tests for Chip SN: ",mychipIDBox[0].get())
 	ChipSN=mychipIDBox[0].get()
 
@@ -811,50 +981,78 @@ def RunTests():
 	dset = tempstatus.create_dataset("CurrentRun",dtype='i')
 	dset.attrs['ChipSN']=ChipSN
 	dset.attrs['currentTest']=currentTests
+	dset.attrs['UseTCPIPControl']=UseTCPIPControlState.get()
+	dset.attrs['LoadHTMLplot']=LoadHTMLplotsState.get()
+	dset.attrs['v2bASIC']=v2bState.get()
+	dset.attrs['SNAutoUp']=SNAutoIncrement.get()
 	tempstatus.close()
 
-	#INIT BOARD/CHIP
-	c=init_controller()
-	#init_board(c) # defaults to channel 1
-	init_board(c,4)
-	chip=init_chips(c)	 
-	print(chip)
+	#INIT BOARD/CHIP and test all 4 comm links
+	init_chip_results=0
+	for io_channel in [4,3,1]: # SKIPPING 2 due to problem readout
+		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
+		c=init_controller()
+		#init_board(c) # defaults to channel 1
+		init_board(c,io_channel)
+		chip=init_chips(c)	 
+		print(chip)
+		if chip == None : 
+			print('Failed in init_chips for io_channel ',io_channel)
+			init_chip_results=init_chip_results+pow(2,(io_channel-1))
+
+	# No point doing further tests if chip config failed
+	if init_chip_results !=0 :
+		powerdown(c)
+		return -init_chip_results 
+
+	#c=init_controller()
+	#init_board(c,4)
+	#chip=init_chips(c)	 
+	#print(chip)
 
 	#test flipping bits in config register and see that they configure
-	test_config_registers(c,chip)	
-
+	register_results = test_config_registers(c,chip)	
+	if register_results != 0 : 
+		print('test_config_registers returned ',register_results)
+		if register_results == 1 :
+			print('Failed with bit flipping in register')
+		if register_results == 2 :
+			print('Failed with config in test_config_registers')
 	#print(c.network)	
 	#for io_group, io_channels in c.network.items():
 	#	for io_channel in io_channels:
 	#		print('reset uart speed on channel',io_channel,'...')
 	#		c.io.set_uart_clock_ratio(io_channel, 2, io_group=io_group)
 	#c.reset_network(1,4)
-	c.io.cleanup() # stop zmq io threads needed if you make a new controller
-	c=init_controller()
-	init_board(c,3)
-	chip=init_chips(c)	 
-	print(chip)	
-	c.io.cleanup() # stop zmq io threads needed if you make a new controller
-	c=init_controller()
-	init_board(c,2)
-	chip=init_chips(c)	 
-	print(chip)	
-	c.io.cleanup() # stop zmq io threads needed if you make a new controller
-	c=init_controller()
-	init_board(c,1)
-	chip=init_chips(c)	 
-	print(chip)	
+	#c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	#c=init_controller()
+	#init_board(c,3)
+	#chip=init_chips(c)	 
+	#print(chip)	
+	#print('##############################################################')
+	#print('##############################################################')
+	#print('###     SKIPPING CHANNEL 2 since PISO1 is broken on board  ###')
+	#print('##############################################################')
+	#print('##############################################################')
+	#c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	#c=init_controller()
+	#init_board(c,2)
+	#chip=init_chips(c)	 
+	#print(chip)	
 
-	######################################
-	#exit()
-	######################################
-	
+	#c.io.cleanup() # stop zmq io threads needed if you make a new controller
+	#c=init_controller()
+	#init_board(c,1)
+	#chip=init_chips(c)	 
+	#print(chip)	
+
+	# No point doing further tests if register writing failed
+	if register_results != 0 :
+		powerdown(c)
+		return -100*register_results 
+
 	# Set global threshold
-	setGlobalThresh(c,chip,100)
-
-	# Read some Data
-	#c.run(1,'test')
-	#print(c.reads[-1])
+	setGlobalThresh(c,chip,255)
 
 	# Enable analog monitor on one channel
 	c.enable_analog_monitor(chip.chip_key,28)
@@ -869,7 +1067,7 @@ def RunTests():
 	# Turn off periodic_reset
 	chip.config.enable_periodic_reset = 0 # turn off periodic reset
 	# Turn on periodic_reset
-	chip.config.enable_periodic_reset = 1 # turn off periodic reset
+	chip.config.enable_periodic_reset = 1 # turn on periodic reset
 
 	# set a really long periodic reset (std=4096)
 	#chip.config.periodic_reset_cycles=4096 # 819us
@@ -887,6 +1085,8 @@ def RunTests():
 	#set ibias_csa  (8 for default, range [0-15])
 	#chip.config.ibias_csa=12
 
+	chip.config.pixel_trim_dac = [31] * NumASICchannels
+
 	c.write_configuration(chip.chip_key)
 	c.verify_configuration(chip.chip_key)
 
@@ -895,6 +1095,8 @@ def RunTests():
 	c.write_configuration(chip.chip_key)
 	c.verify_configuration(chip.chip_key)
 
+	#print(chip.config)
+        
 	# END INIT BOARD/CHIP
 
 	# Update progress boxes along the way
@@ -1017,14 +1219,6 @@ def trygui():
 				"AnalogDisplayLoop"]
 	testFunctions = [] 
 
-	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
-	dset = tempstatus['CurrentRun']
-	ChipSN = dset.attrs['ChipSN']
-	testDefaults = dset.attrs['currentTest']
-	tempstatus.close()
-	if len(testDefaults)==0:
-		testDefaults = [1,0,0,0,0,0,0]
-
 	global buttonVars
 	#buttonVars = [] #[len(testList)] # will hold StringVar()
 	testButton = [] #[len(testList)] # will hold test checkbuttons
@@ -1039,7 +1233,7 @@ def trygui():
 		testFunctions.append(testFunctionNames[testID])
 		#print(test)
 		buttonVars.append(tk.StringVar())
-		buttonVars[testID].set(testDefaults[testID])
+		#buttonVars[testID].set(testDefaults[testID])
 		testButton.append(ttk.Checkbutton(testCheckframe,
 			text=test,variable=buttonVars[testID],command=printStatus))
 		testButton[testID].grid(column=0,row=row,sticky="W")
@@ -1099,6 +1293,24 @@ def trygui():
 	#numChipWheel.configure(state="disabled")  # disable multi-chip testing for now
 	numChipVar.set("1")
 	deploySN()
+
+	#Initialize the GUI state from the previous run
+	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
+	dset = tempstatus['CurrentRun']
+	ChipSN = dset.attrs['ChipSN']
+	testDefaults = dset.attrs['currentTest']
+	if len(testDefaults)==0:
+		testDefaults = [1,0,0,0,0,0,0]
+	testID=0
+	for test in testList:
+		buttonVars[testID].set(testDefaults[testID])
+		testID=testID+1
+	UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
+	LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
+	v2bState.set(dset.attrs['v2bASIC'])
+	SNAutoIncrement.set(dset.attrs['SNAutoUp'])
+	tempstatus.close()
+
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
 	# seems that deploySN has to happen after first window paint
 	# this makes it interactive?
@@ -1162,7 +1374,6 @@ def mainish():
 	c.disable_analog_monitor(chip.chip_key)
 	c.write_configuration(chip.chip_key)
 	c.verify_configuration(chip.chip_key)
-
 
 	trygui(c,chip)
 
