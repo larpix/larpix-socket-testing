@@ -1,6 +1,6 @@
 # this might read in a data file and calculate and/or make plots of baseline values
 
-import os
+import os,sys
 import pandas as pd
 import h5py
 import plotly
@@ -11,6 +11,16 @@ import plotly.graph_objs as go
 import csv
 import numpy as np
 from collections import Counter
+import time
+
+mypid=os.getpid()
+os.environ['PRINT_TIME_PID']=str(mypid)
+
+print(mypid)
+print('mypid in socket_baselines is ',mypid)
+
+DateDirPath = time.strftime("%y%m%d")
+if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 
 NumASICchannels = 64
 
@@ -103,8 +113,12 @@ fig.update_layout(barmode='overlay')
 if os.getenv('socket_PlotBaselineChannels')=='1':
 	fig.show()	
 
+
+BaselineDirPath = DateDirPath+"/baselines/"
+if not os.path.exists(BaselineDirPath) : os.mkdir(BaselineDirPath)
+
 #plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
-fig.write_html("baselines/Baseline_"+ChipSN+".html",auto_open=False )
+fig.write_html(BaselineDirPath+"Baseline_"+ChipSN+".html",auto_open=False )
 
 BaselineLoop(datachunk,0,NumASICchannels-1)
 
@@ -128,8 +142,15 @@ for chan in range(NumASICchannels):
 	'ChipSN':ChipSN,'io_group':io_group,'io_channel':io_channel},ignore_index=True)
 
 
-#summaryFrame.to_csv("t.csv",mode='a',header=True)
-summaryFrame.to_csv("t.csv",mode='a',header=False)
+#summaryFrame.to_csv("t.csv",mode='a',header=False)
+
+# New dated file paths and names  
+summaryFile=DateDirPath+"/bps-summary"+DateDirPath+".csv"
+# If file exists, append with no header
+if os.path.exists(summaryFile) : summaryFrame.to_csv(summaryFile,mode='a',header=False)
+# else create file with header
+else : summaryFrame.to_csv(summaryFile,mode='a',header=True)
+
 
 # Load limits dataFrame Should do this from a file at some point.
 v2std = False
@@ -247,3 +268,10 @@ os.environ['socket_BadBaselineChannels']=str(nBadBaselineChannels)
 
 #fig2.show()
 
+# I don't really want to exit, just return the value
+sys.exit(nBadBaselineChannels)
+
+#def cleanup(nBadBaselineChannels=0):
+#	return nBadBaselineChannels
+
+#cleanup(nBadBaselineChannels)

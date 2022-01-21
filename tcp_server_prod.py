@@ -24,6 +24,7 @@ Hello='H\r'
 Start='S\r'
 Ready='R\r'
 EOL='EOL\r'
+Result0='0\r'
 Result1='1\r'
 Result2='2\r'
 Result3='3\r'
@@ -35,7 +36,8 @@ Result8='8\r'
 Result9='9\r'
 
 def DumbFunc(n):
-	print('I am a dumb function ',n)
+	#print('I am a dumb function ',n)
+	return
 
 def OpenSocketConn(HOST,PORT):
 	print('Starting TCPIP server connection')
@@ -55,6 +57,7 @@ def CheckSocketForData (conn):
 	Start='S\r'
 	Ready='R\r'
 	EOL='EOL\r'
+	Result0='0\r'
 	Result1='1\r'
 	Result2='2\r'
 	Result3='3\r'
@@ -64,6 +67,8 @@ def CheckSocketForData (conn):
 	Result7='7\r'
 	Result8='8\r'
 	Result9='9\r'
+	if conn.fileno() <0 : # Check if socket is open
+		return
 	data = conn.recv(1024)
 	if data == bytes(Hello,"utf-8") :
 		print('Received Hello from Chip Handler')
@@ -74,24 +79,6 @@ def CheckSocketForData (conn):
 	elif data == bytes(Start,"utf-8") :
 		print('Received Start from Chip Handler')
 		return data
-		#Start Test
-		time.sleep(5)
-		#Send back a result
-		#print('Sending ',bytes(Result1,"utf-8"),' to Chip Handler at',time.strftime("%H:%M:%S"))
-		#Success (Result1)
-		#conn.sendall(bytes(Result1,"utf-8"))
-		#Fail 2 (Result2)
-		#conn.sendall(bytes(Result2,"utf-8"))
-		#Success (Result3)
-		#conn.sendall(bytes(Result3,"utf-8"))
-		#Success (result4)
-		#conn.sendall(bytes(Result4,"utf-8"))
-		#Success (result5)
-		#conn.sendall(bytes(Result5,"utf-8"))
-		#Success (result6)
-		#conn.sendall(bytes(Result6,"utf-8"))
-		#Success (result7)
-		#conn.sendall(bytes(Result7,"utf-8"))
 	elif not data : 
 		time.sleep(0.1) # just empty waiting, do nothing
 		#print('waiting... conn=',conn)
@@ -103,4 +90,3 @@ def CheckSocketForData (conn):
 		print('Received unknown ', data, ' as data')
 	return
 
-DumbFunc('this one')
