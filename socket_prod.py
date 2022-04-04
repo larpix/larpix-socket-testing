@@ -49,6 +49,8 @@ TileChannelMask
 # 1, 1, 1, 1, 1, 1, 0, 0,
 # 0, 0, 1, 1, 1, 1, 1, 1]
 
+# TODO: make changes for v2 ASIC
+
 def init_controller():
 	c = Controller()
 	#c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
