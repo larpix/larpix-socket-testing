@@ -207,10 +207,14 @@ for chan in range(NumASICchannels):
 			MaxStd = round(theStd + 1.0 * max(theErrStd,3.0),2)
 			MinStd = round(theStd - 1.0 * max(theErrStd,3.0),2)
 		elif v2bstd:
-			MaxMean = round(theMean + 1.0 * max(theErrMean,0.0),2)
-			MinMean = round(theMean - 1.0 * max(theErrMean,0.0),2)
-			MaxStd = round(theStd + 1.0 * max(theErrStd,0.0),2)
-			MinStd = round(theStd - 1.0 * max(theErrStd,0.0),2)
+			#MaxMean = round(theMean + 1.0 * max(theErrMean,0.0),2)
+			#MinMean = round(theMean - 1.0 * max(theErrMean,0.0),2)
+			#MaxStd = round(theStd + 1.0 * max(theErrStd,0.0),2)
+			#MinStd = round(theStd - 1.0 * max(theErrStd,0.0),2)
+			MaxMean = 25.0 
+			MinMean = 5.0 
+			MaxStd = 4.0 
+			MinStd = 0.8 
 		badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ( ( (summaryFrame['Std']>MaxStd) | (summaryFrame['Std']<MinStd) )
 				| ( (summaryFrame['Mean']<MinMean) | (summaryFrame['Mean']>MaxMean) ) ) ]
 		if badChan.empty==False: 
