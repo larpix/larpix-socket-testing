@@ -2,8 +2,7 @@
 # after running env3  
 # cd ~/larpixv2/ ;  source bin/activate
 
-import subprocess,sys,os,signal
-from subprocess import Popen,PIPE,CalledProcessError,STDOUT
+import subprocess,sys,os
 import larpix
 from larpix import Controller
 #from larpix.io.zmq_io import ZMQ_IO
@@ -17,6 +16,7 @@ import pandas as pd
 import runpy
 import simpleaudio as sa
 import tcp_server_prod as tsp
+import keyboard
 #import t
 
 #DumbFunc('another one')
@@ -308,7 +308,7 @@ def init_chips(c):
 	_uart_phase = 0
 	for ch in range(1,5):
 		c.io.set_reg(0x1000*ch + 0x2014, _uart_phase)
-		print('set phase:',_uart_phase)
+		#print('set phase:',_uart_phase)
 
 
 	#reset larpix chips [set sw_rst_cycles to something long, i.e. 256,1024, 
@@ -391,31 +391,52 @@ def init_chips(c):
 			verified,returnregisters=c.verify_configuration(chip.chip_key)
 			print(verified,returnregisters)
 
-		'''  Used during setup, not needed regularly
-		while verified == False: 
+		try: 
+			while True: #Used during setup, not needed regularly
+				#while verified == False: 
+				chip = list(c.chips.values())[0] # selects 1st chip in chain
+				print('Trying again on ',chip,' enter <CTRL-C> to quit')
+				#print('with config= ',chip.config)
+				#c.io.reset_larpix(length=10240)
+				c.write_configuration(chip.chip_key)
+				verified,returnregisters=c.verify_configuration(chip.chip_key)
+				print(verified)
+				print('Tried at ',time.strftime("%H:%M:%S"))
+		except KeyboardInterrupt:
+			pass
+
+		if io_channel == 1: #Used during setup, runs prbs serial out on all uart channels not needed regularly
+			#while verified == False: 
 			chip = list(c.chips.values())[0] # selects 1st chip in chain
+			c[chip.chip_key].config.enable_posi = [1,1,1,1]
+			c[chip.chip_key].config.enable_piso_downstream = [1,1,1,1]
+			c[chip.chip_key].config.test_mode_uart0 = 1
+			c[chip.chip_key].config.test_mode_uart1 = 1
+			c[chip.chip_key].config.test_mode_uart2 = 1
+			c[chip.chip_key].config.test_mode_uart3 = 1
+			c[chip.chip_key].config.v_cm_lvds_tx0 = 7
+			c[chip.chip_key].config.v_cm_lvds_tx1 = 7
+			c[chip.chip_key].config.v_cm_lvds_tx2 = 7
+			c[chip.chip_key].config.v_cm_lvds_tx3 = 7
+			c[chip.chip_key].config.tx_slices0 = 15
+			c[chip.chip_key].config.tx_slices1 = 15
+			c[chip.chip_key].config.tx_slices2 = 15
+			c[chip.chip_key].config.tx_slices3 = 15
+			c[chip.chip_key].config.i_tx_diff0=0
+			c[chip.chip_key].config.i_tx_diff1=0
+			c[chip.chip_key].config.i_tx_diff2=0
+			c[chip.chip_key].config.i_tx_diff3=0
 			print('Trying again on ',chip)
 			print('with config= ',chip.config)
-			#c[chip_key].config.enable_posi = [1,1,1,1]
-			#c[chip_key].config.test_mode_uart0 = 1
-			#c[chip_key].config.test_mode_uart1 = 1
-			#c[chip_key].config.test_mode_uart2 = 1
-			#c[chip_key].config.test_mode_uart3 = 1
-			#c[chip_key].config.v_cm_lvds_tx0 = 0
-			#c[chip_key].config.v_cm_lvds_tx1 = 0
-			#c[chip_key].config.v_cm_lvds_tx2 = 0
-			#c[chip_key].config.v_cm_lvds_tx3 = 0
-			c.io.reset_larpix(length=10240)
+			#c.io.reset_larpix(length=10240) #Wipes config, don't do it here.
 			c.write_configuration(chip.chip_key)
-			verified,returnregisters=c.verify_configuration(chip.chip_key)
-			print(verified,returnregisters)
+			#verified,returnregisters=c.verify_configuration(chip.chip_key)
+			#print(verified,returnregisters)
 			print('Tried at ',time.strftime("%H:%M:%S"))
+			print('Running prbs for debugging, will exit after')
 			#time.sleep(20)
 			wait_here()
-		'''
-
-		#exit()
-		#return c
+			exit()
 
 
 	if v2bState.get() == '0':
@@ -670,37 +691,10 @@ def get_baseline_periodicselftrigger(c,chip):
 	c.write_configuration(chip.chip_key)
 
 	#import socket_baselines
-
-	run_Popen=True
-	if run_Popen :
-		# Run socket_baselines in subprocess to allow killing
-		cmd=['python socket_baselines.py']
-		start_time=time.time()
-		with Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
-			FirstLine=True
-			print('hopefully running socket_baselines.py')
-			for line in p.stdout:
-				if FirstLine :
-					mypid=line # first line should just be the PID from the subprocess
-					FirstLine=False
-				print(line, end='') # process line here
-				dt=time.time()-start_time
-				#print('dt=',dt)
-				if dt > 15 : 
-					# PID of process sent as first output (set in socket_baselines.py)
-					print('mypid socket_baselines is ',mypid)
-					os.kill(int(mypid),signal.SIGKILL)
-
-		nBadBaselineChannels=p.returncode
-		#if p.returncode != 0:
-			#nBadBaselineChannels=p.returncode
-			#raise CalledProcessError(p.returncode, p.args)
-	else : 
-		os.environ['socket_PlotBaselineChannels']=LoadHTMLplotsState.get()
-		runpy.run_module(mod_name='socket_baselines')
-		nBadBaselineChannels=os.getenv('socket_BadBaselineChannels')
-		print(nBadBaselineChannels)
-
+	os.environ['socket_PlotBaselineChannels']=LoadHTMLplotsState.get()
+	runpy.run_module(mod_name='socket_baselines')
+	nBadBaselineChannels=os.getenv('socket_BadBaselineChannels')
+	print(nBadBaselineChannels)
 	if int(nBadBaselineChannels) == 0 :
 		textBox.config(bg="green")
 		successSong.play()
@@ -709,7 +703,7 @@ def get_baseline_periodicselftrigger(c,chip):
 		textBox.config(bg="red") # flashing? 
 		sadSong.play()
 		window.update()	
-
+	
 	return nBadBaselineChannels
 
 def get_baseline_periodicexttrigger(c,chip):
@@ -946,7 +940,7 @@ def RunControl():
 		# Start the server
 		print('Starting TCPIP server connection')
 		conn, addr = tsp.OpenSocketConn(HOST,PORT)
-		while conn : # was while True : If TCP no longer works, change it back 20211214 LMM
+		while True : 
 			message = tsp.CheckSocketForData(conn)
 			if message == bytes(Hello,"utf-8") :
 				print('Received Hello from Chip Handler')
@@ -954,7 +948,6 @@ def RunControl():
 				print('Sending Ready to Chip Handler')
 				conn.sendall(bytes(Ready,"utf-8"))
 			# Load a chip
-			FirstTry = True
 			# Wait for Start
 			message = tsp.CheckSocketForData(conn)
 			if message == bytes(Start,"utf-8") :
@@ -962,28 +955,14 @@ def RunControl():
 				#Send Ready (or EOL) back
 				print('Starting tests')
 				# Run Tests
-				ResultNum=RunTests()
-				# Does this section need a full Hello/Ready? probably
-				if FirstTry and not ResultNum==0 : 
-					#send 8 to retry socket insertion and rerun tests
-					# requires double plunge enable for this result in chip handler
-					print('Result was ',ResultNum,' sending ',Result8,' to retry')
-					conn.sendall(bytes(Result8,"utf-8"))
-					FirstTry = False
-					message = tsp.CheckSocketForData(conn)
-					if message == bytes(Start,"utf-8") :
-						print('Received Start from Chip Handler')
-						#Send Ready (or EOL) back
-						print('Starting tests')
-						# Run Tests
-						ResultNum=RunTests()
+				ResultNum=RunTests() 
 				#time.sleep(5)
 				#ResultNum=0 # Fake result for testing
 				# Send results to Chip Handler
 				if ResultNum == 0 : 
 					print('Result was ',ResultNum,' sending ',Result1)
 					conn.sendall(bytes(Result1,"utf-8"))
-				elif ResultNum < 0 : 
+				if ResultNum < 0 : 
 					print('Result was ',ResultNum,' sending ',Result3)
 					conn.sendall(bytes(Result3,"utf-8"))
 				else: 
@@ -1032,7 +1011,7 @@ def RunTests():
 
 	#INIT BOARD/CHIP and test all 4 comm links
 	init_chip_results=0
-	for io_channel in [4,3,2,1]: 
+	for io_channel in [4,3,2,1]:
 		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
 		c=init_controller()
 		#init_board(c) # defaults to channel 1
@@ -1043,24 +1022,6 @@ def RunTests():
 			print('Failed in init_chips for io_channel ',io_channel)
 			init_chip_results=init_chip_results+pow(2,(io_channel-1))
 
-	# Write results of interface config to dated file
-	DateDirPath = time.strftime("%y%m%d")
-	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
-	# New dated file paths and names  
-	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
-	# If file exists, append with no header
-	if os.path.exists(configResFileName) : 
-		configResFile=open(configResFileName,mode='a')
-		outTime=int(time.time())
-		configResFile.write(str(outTime)+','+str(ChipSN)+','+str(init_chip_results)+'\n') 
-		configResFile.close()
-	# else create file with header
-	else : 
-		configResFile=open(configResFileName,mode='w')
-		configResFile.write('TestTime,ChipSN,init_chip_results\n')
-		outTime=int(time.time())
-		configResFile.write(str(outTime)+','+str(ChipSN)+','+str(init_chip_results)+'\n') 
-		configResFile.close()
 	# No point doing further tests if chip config failed
 	if init_chip_results !=0 :
 		powerdown(c)

@@ -1,6 +1,6 @@
 # this might read in a data file and calculate and/or make plots of baseline values
 
-import os
+import os,sys
 import pandas as pd
 import h5py
 import plotly
@@ -11,6 +11,16 @@ import plotly.graph_objs as go
 import csv
 import numpy as np
 from collections import Counter
+import time
+
+mypid=os.getpid()
+os.environ['PRINT_TIME_PID']=str(mypid)
+
+print(mypid)
+print('mypid in socket_baselines is ',mypid)
+
+DateDirPath = time.strftime("%y%m%d")
+if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 
 NumASICchannels = 64
 
@@ -87,6 +97,7 @@ io_channel=datachunk['io_channel'].iloc[0]
 #datachunk.shape
 #id(datachunk)
 
+# Dump raw data to csv file
 #datachunk.to_csv("temp.csv")
 
 # grab user input for barcode SN
@@ -99,9 +110,15 @@ tempstatus.close()
 
 fig = px.histogram(datachunk,x='dataword',color='channel_id',log_y=True,opacity=0.6)
 fig.update_layout(barmode='overlay')
-fig.show()	
+if os.getenv('socket_PlotBaselineChannels')=='1':
+	fig.show()	
 
-plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
+
+BaselineDirPath = DateDirPath+"/baselines/"
+if not os.path.exists(BaselineDirPath) : os.mkdir(BaselineDirPath)
+
+#plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
+fig.write_html(BaselineDirPath+"Baseline_"+ChipSN+".html",auto_open=False )
 
 BaselineLoop(datachunk,0,NumASICchannels-1)
 
@@ -125,28 +142,54 @@ for chan in range(NumASICchannels):
 	'ChipSN':ChipSN,'io_group':io_group,'io_channel':io_channel},ignore_index=True)
 
 
-#summaryFrame.to_csv("t.csv",mode='a',header=True)
-summaryFrame.to_csv("t.csv",mode='a',header=False)
+#summaryFrame.to_csv("t.csv",mode='a',header=False)
+
+# New dated file paths and names  
+summaryFile=DateDirPath+"/bps-summary"+DateDirPath+".csv"
+# If file exists, append with no header
+if os.path.exists(summaryFile) : summaryFrame.to_csv(summaryFile,mode='a',header=False)
+# else create file with header
+else : summaryFrame.to_csv(summaryFile,mode='a',header=True)
+
 
 # Load limits dataFrame Should do this from a file at some point.
+v2std = False
+if v2std:
+	MeanMeanbyChan=[14.07, 14.2, 14.27, 14.6, 15.34, 15.54, -999.0, -999.0, -999.0, -999.0, 42.58, 23.44, 19.02, 14.67, 14.19, 14.11, 13.18, 14.08, 14.2, 15.68, 15.45, 16.52, -999.0, -999.0, -999.0, -999.0, 11.48, 12.02, 10.47, 10.51, 13.3, 12.35, 12.34, 14.77, 15.06, 14.7, 18.25, 21.93, -999.0, -999.0, -999.0, 9.6, 11.35, 11.72, 9.15, 11.74, 11.8, 9.56, 12.02, 11.94, 9.9, 11.82, 11.92, 11.35, -999.0, -999.0, -999.0, -999.0, 12.2, 12.88, 12.98, 13.31, 13.55, 13.64]
+	StdMeanbyChan=[1.69, 1.87, 1.98, 11.15, 1.96, 2.21, -999.0, -999.0, -999.0, -999.0, 2.59, 2.6, 2.14, 1.88, 1.79, 1.75, 1.79, 1.82, 1.78, 2.06, 8.48, 2.53, -999.0, -999.0, -999.0, -999.0, 1.7, 1.8, 1.68, 1.83, 1.76, 1.89, 1.59, 1.84, 1.77, 1.62, 1.54, 1.92, -999.0, -999.0, -999.0, 1.69, 1.65, 1.69, 1.79, 1.68, 1.7, 1.65, 1.65, 1.7, 1.66, 1.82, 1.72, 1.85, -999.0, -999.0, -999.0, -999.0, 7.76, 2.06, 1.8, 1.89, 1.65, 1.94]
+	MeanStdbyChan=[1.36, 1.4, 1.46, 1.58, 1.9, 5.14, -999.0, -999.0, -999.0, -999.0, 3.71, 2.68, 2.31, 2.16, 2.18, 2.28, 2.45, 2.71, 3.16, 3.92, 4.86, 7.96, -999.0, -999.0, -999.0, -999.0, 2.26, 2.03, 2.11, 1.95, 1.65, 1.87, 1.83, 1.64, 1.99, 2.18, 2.39, 3.75, -999.0, -999.0, -999.0, 3.72, 2.47, 1.72, 1.64, 1.44, 1.37, 1.53, 1.37, 1.39, 1.61, 1.55, 1.65, 1.99, -999.0, -999.0, -999.0, -999.0, 1.37, 1.35, 1.35, 1.33, 1.32, 1.34]
+	StdStdbyChan=[1.46, 4.34, 2.88, 2.83, 2.49, 2.45, -999.0, -999.0, -999.0, -999.0, 1.71, 4.55, 3.47, 2.85, 3.21, 3.17, 2.87, 3.44, 3.85, 3.71, 3.26, 4.39, -999.0, -999.0, -999.0, -999.0, 1.74, 1.88, 2.98, 2.74, 1.7, 2.6, 2.61, 1.66, 2.61, 2.77, 1.56, 1.43, -999.0, -999.0, -999.0, 1.87, 1.69, 1.6, 2.6, 1.49, 1.47, 2.77, 1.52, 1.88, 2.72, 1.38, 1.74, 2.19, -999.0, -999.0, -999.0, -999.0, 1.79, 1.65, 1.49, 1.86, 2.81, 4.21]
 
-MeanMeanbyChan=[14.07, 14.2, 14.27, 14.6, 15.34, 15.54, -999.0, -999.0, -999.0, -999.0, 42.58, 23.44, 19.02, 14.67, 14.19, 14.11, 13.18, 14.08, 14.2, 15.68, 15.45, 16.52, -999.0, -999.0, -999.0, -999.0, 11.48, 12.02, 10.47, 10.51, 13.3, 12.35, 12.34, 14.77, 15.06, 14.7, 18.25, 21.93, -999.0, -999.0, -999.0, 9.6, 11.35, 11.72, 9.15, 11.74, 11.8, 9.56, 12.02, 11.94, 9.9, 11.82, 11.92, 11.35, -999.0, -999.0, -999.0, -999.0, 12.2, 12.88, 12.98, 13.31, 13.55, 13.64]
-StdMeanbyChan=[1.69, 1.87, 1.98, 11.15, 1.96, 2.21, -999.0, -999.0, -999.0, -999.0, 2.59, 2.6, 2.14, 1.88, 1.79, 1.75, 1.79, 1.82, 1.78, 2.06, 8.48, 2.53, -999.0, -999.0, -999.0, -999.0, 1.7, 1.8, 1.68, 1.83, 1.76, 1.89, 1.59, 1.84, 1.77, 1.62, 1.54, 1.92, -999.0, -999.0, -999.0, 1.69, 1.65, 1.69, 1.79, 1.68, 1.7, 1.65, 1.65, 1.7, 1.66, 1.82, 1.72, 1.85, -999.0, -999.0, -999.0, -999.0, 7.76, 2.06, 1.8, 1.89, 1.65, 1.94]
-MeanStdbyChan=[1.36, 1.4, 1.46, 1.58, 1.9, 5.14, -999.0, -999.0, -999.0, -999.0, 3.71, 2.68, 2.31, 2.16, 2.18, 2.28, 2.45, 2.71, 3.16, 3.92, 4.86, 7.96, -999.0, -999.0, -999.0, -999.0, 2.26, 2.03, 2.11, 1.95, 1.65, 1.87, 1.83, 1.64, 1.99, 2.18, 2.39, 3.75, -999.0, -999.0, -999.0, 3.72, 2.47, 1.72, 1.64, 1.44, 1.37, 1.53, 1.37, 1.39, 1.61, 1.55, 1.65, 1.99, -999.0, -999.0, -999.0, -999.0, 1.37, 1.35, 1.35, 1.33, 1.32, 1.34]
-StdStdbyChan=[1.46, 4.34, 2.88, 2.83, 2.49, 2.45, -999.0, -999.0, -999.0, -999.0, 1.71, 4.55, 3.47, 2.85, 3.21, 3.17, 2.87, 3.44, 3.85, 3.71, 3.26, 4.39, -999.0, -999.0, -999.0, -999.0, 1.74, 1.88, 2.98, 2.74, 1.7, 2.6, 2.61, 1.66, 2.61, 2.77, 1.56, 1.43, -999.0, -999.0, -999.0, 1.87, 1.69, 1.6, 2.6, 1.49, 1.47, 2.77, 1.52, 1.88, 2.72, 1.38, 1.74, 2.19, -999.0, -999.0, -999.0, -999.0, 1.79, 1.65, 1.49, 1.86, 2.81, 4.21]
+	limitsdf=pd.DataFrame(columns=['Mean','errMean','Std','errStd','ChanName','Chan'])
 
-limitsdf=pd.DataFrame(columns=['Mean','errMean','Std','errStd','ChanName','Chan'])
+	for chan in range(NumASICchannels):
+		#if MeanMeanbyChan[chan]!=-999.:
+		textchan = 'ch{:02d}'.format(chan)
+		#original 38 used these
+		#errMean=3 * max(StdMeanbyChan[chan],4.0)
+		#errStd=5 * max(StdStdbyChan[chan],0.7)
+		errMean=1.0 * max(StdMeanbyChan[chan],10.0)
+		errStd=1.0 * max(StdStdbyChan[chan],3.0)
+		limitsdf=limitsdf.append({'Mean':MeanMeanbyChan[chan],'errMean':errMean,'Std':MeanStdbyChan[chan],
+		'errStd':errStd,'ChanName':textchan,'Chan':chan},ignore_index=True)
 
-for chan in range(NumASICchannels):
-	#if MeanMeanbyChan[chan]!=-999.:
-	textchan = 'ch{:02d}'.format(chan)
-	#original 38 used these
-	#errMean=3 * max(StdMeanbyChan[chan],4.0)
-	#errStd=5 * max(StdStdbyChan[chan],0.7)
-	errMean=1.0 * max(StdMeanbyChan[chan],10.0)
-	errStd=1.0 * max(StdStdbyChan[chan],3.0)
-	limitsdf=limitsdf.append({'Mean':MeanMeanbyChan[chan],'errMean':errMean,'Std':MeanStdbyChan[chan],
-	'errStd':errStd,'ChanName':textchan,'Chan':chan},ignore_index=True)
+v2bstd=True
+if v2bstd:
+	# standards measured from 177 v2b on the socket board.
+
+	MeanMeanbyChan=[16.56, 16.23, 16.7, 15.97, 16.49, 16.72, 16.64, 16.5, 11.82, 11.76, 12.34, 13.96, 14.73, 15.75, 15.87, 16.54, 16.75, 17.41, 17.41, 18.12, 17.69, 18.13, 18.08, 18.02, 17.16, 18.24, 18.06, 18.01, 17.38, 17.99, 17.18, 17.19, 17.12, 17.36, 16.82, 17.19, 16.94, 17.27, 17.04, 17.09, 18.21, 16.96, 16.99, 16.61, 16.66, 16.41, 17.09, 17.02, 16.93, 15.82, 16.34, 15.92, 16.34, 16.14, 16.83, 16.43, 16.8, 16.13, 16.78, 16.38, 16.34, 16.4, 16.69, 16.18]
+	StdMeanbyChan=[2.19, 2.44, 2.27, 2.05, 2.22, 2.41, 1.92, 2.15, 2.17, 1.94, 1.95, 2.13, 2.22, 2.03, 1.99, 2.07, 2.23, 2.36, 2.4, 2.15, 2.06, 2.18, 2.3, 2.44, 1.99, 2.13, 2.25, 2.18, 2.18, 2.05, 2.03, 2.01, 2.29, 2.08, 2.24, 2.15, 1.97, 2.03, 2.19, 2.44, 2.41, 2.06, 2.26, 2.03, 2.23, 2.26, 2.7, 2.64, 2.55, 2.39, 2.03, 2.26, 2.31, 2.15, 2.09, 2.01, 2.22, 2.28, 2.25, 2.26, 2.23, 2.18, 2.15, 2.07]
+	MeanStdbyChan=[1.13, 1.12, 1.12, 1.1, 1.11, 1.14, 1.16, 1.34, 1.0, 1.1, 1.12, 1.08, 1.1, 1.09, 1.09, 1.08, 1.09, 1.1, 1.1, 1.09, 1.09, 1.08, 1.08, 0.99, 1.33, 1.18, 1.14, 1.14, 1.13, 1.12, 1.14, 1.1, 1.12, 1.1, 1.16, 1.12, 1.12, 1.13, 1.16, 1.4, 2.07, 1.16, 1.14, 1.12, 1.12, 1.15, 1.14, 1.1, 1.16, 1.12, 1.12, 1.12, 1.12, 1.08, 1.11, 0.99, 1.6, 1.13, 1.11, 1.09, 1.09, 1.09, 1.11, 1.08]
+	StdStdbyChan=[0.23, 0.22, 0.2, 0.19, 0.2, 0.22, 0.21, 0.31, 0.1, 0.18, 0.2, 0.17, 0.18, 0.19, 0.19, 0.18, 0.2, 0.2, 0.2, 0.19, 0.18, 0.18, 0.16, 0.1, 0.28, 0.21, 0.2, 0.2, 0.21, 0.22, 0.21, 0.17, 0.2, 0.18, 0.21, 0.18, 0.19, 0.19, 0.2, 0.32, 0.24, 0.15, 0.19, 0.2, 0.2, 0.24, 0.22, 0.2, 0.24, 0.23, 0.2, 0.2, 0.21, 0.16, 0.17, 0.08, 0.3, 0.19, 0.2, 0.19, 0.19, 0.19, 0.2, 0.17]
+
+	limitsdf=pd.DataFrame(columns=['Mean','errMean','Std','errStd','ChanName','Chan'])
+
+	for chan in range(NumASICchannels):
+		textchan = 'ch{:02d}'.format(chan)
+		errMean=5.0 * max(StdMeanbyChan[chan],0.0)
+		errStd=4.0 * max(StdStdbyChan[chan],0.0)
+		limitsdf=limitsdf.append({'Mean':MeanMeanbyChan[chan],'errMean':errMean,'Std':MeanStdbyChan[chan],
+		'errStd':errStd,'ChanName':textchan,'Chan':chan},ignore_index=True)
 
 # END Loading limits dataFrame
 
@@ -158,12 +201,20 @@ for chan in range(NumASICchannels):
 		theStd=limitsdf['Std'][(limitsdf['Chan']==chan)].values[0]
 		theErrMean=limitsdf['errMean'][(limitsdf['Chan']==chan)].values[0]
 		theErrStd=limitsdf['errStd'][(limitsdf['Chan']==chan)].values[0]
-		MaxMean = round(theMean + 1.0 * max(theErrMean,10.0),2)
-		MinMean = round(theMean - 1.0 * max(theErrMean,10.0),2)
-		MaxStd = round(theStd + 1.0 * max(theErrStd,3.0),2)
-		MinStd = round(theStd - 1.0 * max(theErrStd,3.0),2)
-		#print('Range for chan ',chan,' Mean and Std= [',MinMean,',',MaxMean,'][',MinStd,',',MaxStd,']')
-		#badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ((summaryFrame['Std']<1) | (summaryFrame['Mean']>240)) ]
+		if v2std:
+			MaxMean = round(theMean + 1.0 * max(theErrMean,10.0),2)
+			MinMean = round(theMean - 1.0 * max(theErrMean,10.0),2)
+			MaxStd = round(theStd + 1.0 * max(theErrStd,3.0),2)
+			MinStd = round(theStd - 1.0 * max(theErrStd,3.0),2)
+		elif v2bstd:
+			#MaxMean = round(theMean + 1.0 * max(theErrMean,0.0),2)
+			#MinMean = round(theMean - 1.0 * max(theErrMean,0.0),2)
+			#MaxStd = round(theStd + 1.0 * max(theErrStd,0.0),2)
+			#MinStd = round(theStd - 1.0 * max(theErrStd,0.0),2)
+			MaxMean = 25.0 
+			MinMean = 5.0 
+			MaxStd = 4.0 
+			MinStd = 0.8 
 		badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ( ( (summaryFrame['Std']>MaxStd) | (summaryFrame['Std']<MinStd) )
 				| ( (summaryFrame['Mean']<MinMean) | (summaryFrame['Mean']>MaxMean) ) ) ]
 		if badChan.empty==False: 
@@ -221,3 +272,10 @@ os.environ['socket_BadBaselineChannels']=str(nBadBaselineChannels)
 
 #fig2.show()
 
+# I don't really want to exit, just return the value
+sys.exit(nBadBaselineChannels)
+
+#def cleanup(nBadBaselineChannels=0):
+#	return nBadBaselineChannels
+
+#cleanup(nBadBaselineChannels)
