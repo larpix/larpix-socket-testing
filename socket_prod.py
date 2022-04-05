@@ -12,6 +12,7 @@ from larpix.logger.h5_logger import HDF5Logger
 import time
 import tkinter as tk
 from tkinter import ttk
+from tkinter import filedialog as fd
 import h5py
 import pandas as pd
 import runpy
@@ -1032,6 +1033,7 @@ def RunTests():
 	dset.attrs['LoadHTMLplot']=LoadHTMLplotsState.get()
 	dset.attrs['v2bASIC']=v2bState.get()
 	dset.attrs['SNAutoUp']=SNAutoIncrement.get()
+	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
 
 	#INIT BOARD/CHIP and test all 4 comm links
@@ -1251,20 +1253,33 @@ def SNAutoUp(): # Set Button to increase last digits of SN by one at end of test
 	#print("SNAutoIncrement=",SNAutoIncrement.get())
 	return
 
+def selectFile(defaultFile):
+	filetypes = (('csv files','*.csv'),('text files','*.txt'),('All files','*.*'))
+	filename = fd.askopenfilename(
+		title='Serial Number file name',
+		initialdir='.',
+		initialfile=defaultFile,
+		filetypes=filetypes)
+	return filename
+
 def UseSNFile(): # Use SN file list for serial numbers
 	# Toggle 
 	#print("SNAutoIncrement=",SNAutoIncrement.get())
 	# Read in a list of Serial Numbers (SNList)
-	global SNList
-	with open('SNList.csv',newline='') as snfile:
-		reader = csv.reader(snfile)
-		SNList = list(reader)
-	print(SNList.index(['2B13303']))
-	print(SNList)
-	# Set the SN text to the "first" entry
-	mychipIDBox[0].delete(0,'end')
-	mychipIDBox[0].insert(0,SNList[0][0])
-	# Adapt SNUp and SNDown to iterate through SNList
+	if SNfromFile.get() == '1':
+		SNAutoIncrement.set('1')
+		global SNList
+		SNcsvFile = selectFile('SNList.csv') 
+		#with open('SNList.csv',newline='') as snfile:
+		with open(SNcsvFile,newline='') as snfile:
+			reader = csv.reader(snfile)
+			SNList = list(reader)
+		#print(SNList.index(['2B13303']))
+		print('read ',len(SNList),' serial numbers from ',SNList[0][0],' to ',SNList[-1][0])
+		# Set the SN text to the "first" entry
+		mychipIDBox[0].delete(0,'end')
+		mychipIDBox[0].insert(0,SNList[0][0])
+		# Adapt SNUp and SNDown to iterate through SNList
 	return
 
 def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end of test
@@ -1420,6 +1435,7 @@ def trygui():
 	LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
 	v2bState.set(dset.attrs['v2bASIC'])
 	SNAutoIncrement.set(dset.attrs['SNAutoUp'])
+	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
 
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
