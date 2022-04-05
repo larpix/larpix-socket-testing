@@ -17,7 +17,11 @@ import pandas as pd
 import runpy
 import simpleaudio as sa
 import tcp_server_prod as tsp
+import csv
 #import t
+global SNList
+SNList = []
+
 
 #DumbFunc('another one')
 
@@ -48,8 +52,6 @@ TileChannelMask
 # 0, 1, 1, 1, 1, 1, 1, 1,
 # 1, 1, 1, 1, 1, 1, 0, 0,
 # 0, 0, 1, 1, 1, 1, 1, 1]
-
-# TODO: make changes for v2 ASIC
 
 def init_controller():
 	c = Controller()
@@ -1203,26 +1205,66 @@ def RunTests():
 	return totalBadChannels
 
 def SNDown(): #reduce SN last digits of SN by one
-	ChipSN = mychipIDBox[0].get()
-	NumSN = int(ChipSN[2:])
-	#print(ChipSN,NumSN)
-	NumSN = NumSN -1
-	ChipSN = ChipSN[:2]+format(NumSN,"04d")
-	mychipIDBox[0].delete(0,'end')
-	mychipIDBox[0].insert(0,ChipSN)
+	if SNfromFile.get() == '0':
+		ChipSN = mychipIDBox[0].get()
+		NumSN = int(ChipSN[2:])
+		#print(ChipSN,NumSN)
+		NumSN = NumSN -1
+		ChipSN = ChipSN[:2]+format(NumSN,"04d")
+		mychipIDBox[0].delete(0,'end')
+		mychipIDBox[0].insert(0,ChipSN)
+	else:
+		global SNList
+		ChipSN = mychipIDBox[0].get()
+		#print(SNList)
+		SNIndex=SNList.index([ChipSN])
+		#print(ChipSN,SNIndex)
+		if SNIndex==0: print("Already at start of list")
+		else: SNIndex = SNIndex-1
+		ChipSN=SNList[SNIndex][0]
+		mychipIDBox[0].delete(0,'end')
+		mychipIDBox[0].insert(0,ChipSN)
 
 def SNUp(): # increase last digits of SN by one
-	ChipSN = mychipIDBox[0].get()
-	NumSN = int(ChipSN[2:])
-	#print(ChipSN,NumSN)
-	NumSN = NumSN +1
-	ChipSN = ChipSN[:2]+format(NumSN,"04d")
-	mychipIDBox[0].delete(0,'end')
-	mychipIDBox[0].insert(0,ChipSN)
+	if SNfromFile.get() == '0':
+		ChipSN = mychipIDBox[0].get()
+		NumSN = int(ChipSN[2:])
+		#print(ChipSN,NumSN)
+		NumSN = NumSN +1
+		ChipSN = ChipSN[:2]+format(NumSN,"04d")
+		mychipIDBox[0].delete(0,'end')
+		mychipIDBox[0].insert(0,ChipSN)
+	else:
+		global SNList
+		ChipSN = mychipIDBox[0].get()
+		#print(SNList)
+		SNIndex=SNList.index([ChipSN])
+		#print(ChipSN,SNIndex)
+		if SNIndex==len(SNList)-1: print("Already at end of list")
+		else: SNIndex = SNIndex+1
+		ChipSN=SNList[SNIndex][0]
+		mychipIDBox[0].delete(0,'end')
+		mychipIDBox[0].insert(0,ChipSN)
 
 def SNAutoUp(): # Set Button to increase last digits of SN by one at end of test
 	# Toggle 
 	#print("SNAutoIncrement=",SNAutoIncrement.get())
+	return
+
+def UseSNFile(): # Use SN file list for serial numbers
+	# Toggle 
+	#print("SNAutoIncrement=",SNAutoIncrement.get())
+	# Read in a list of Serial Numbers (SNList)
+	global SNList
+	with open('SNList.csv',newline='') as snfile:
+		reader = csv.reader(snfile)
+		SNList = list(reader)
+	print(SNList.index(['2B13303']))
+	print(SNList)
+	# Set the SN text to the "first" entry
+	mychipIDBox[0].delete(0,'end')
+	mychipIDBox[0].insert(0,SNList[0][0])
+	# Adapt SNUp and SNDown to iterate through SNList
 	return
 
 def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end of test
@@ -1337,13 +1379,19 @@ def trygui():
 		variable=v2bState) #, command=v2b)
 	v2bBtn.grid(column=3,row=2,padx=20)
 
-
 	global SNAutoIncrement
 	SNAutoIncrement=tk.StringVar()
 	SNAutoIncrement.set(0)
 	SNAutoUpBtn= ttk.Checkbutton(SNframe,text="SN AutoUp",
 		variable=SNAutoIncrement, command=SNAutoUp)
 	SNAutoUpBtn.grid(column=4,row=0,padx=10)
+
+	global SNfromFile
+	SNfromFile=tk.StringVar()
+	SNfromFile.set(0)
+	SNfromFileBtn= ttk.Checkbutton(SNframe,text="Use SN File",
+		variable=SNfromFile, command=UseSNFile)
+	SNfromFileBtn.grid(column=4,row=2,padx=10)
 
 	SNUpBtn= ttk.Button(SNframe,text="SN Up",command=SNUp)
 	SNUpBtn.grid(column=5,row=0)
