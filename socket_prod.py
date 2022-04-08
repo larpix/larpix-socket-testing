@@ -16,6 +16,7 @@ from tkinter import filedialog as fd
 import h5py
 import pandas as pd
 import runpy
+import numpy as np
 import simpleaudio as sa
 import tcp_server_prod as tsp
 import csv
@@ -1275,7 +1276,12 @@ def UseSNFile(): # Use SN file list for serial numbers
 			reader = csv.reader(snfile)
 			SNList = list(reader)
 		#print(SNList.index(['2B13303']))
-		print('read ',len(SNList),' serial numbers from ',SNList[0][0],' to ',SNList[-1][0])
+		SNarray=np.array(SNList)
+		UniqueSN=np.unique(SNarray)
+		if len(SNList) == len(UniqueSN):
+			print('read ',len(SNList),' serial numbers from ',SNList[0][0],' to ',SNList[-1][0])
+		else:
+			print('Not all SN are unique, check SNFile')
 		# Set the SN text to the "first" entry
 		mychipIDBox[0].delete(0,'end')
 		mychipIDBox[0].insert(0,SNList[0][0])
