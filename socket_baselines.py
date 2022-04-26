@@ -215,7 +215,7 @@ for chan in range(NumASICchannels):
 			MinMean = 5.0 
 			MaxStd = 4.0 
 			MinStd = 0.8 
-		badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ( ( (summaryFrame['Std']>MaxStd) | (summaryFrame['Std']<MinStd) )
+		badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ( summaryFrame['Nent'] == 0 | ( (summaryFrame['Std']>MaxStd) | (summaryFrame['Std']<MinStd) )
 				| ( (summaryFrame['Mean']<MinMean) | (summaryFrame['Mean']>MaxMean) ) ) ]
 		if badChan.empty==False: 
 			print(badChan)
