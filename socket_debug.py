@@ -405,7 +405,7 @@ def init_chips(c):
 		except KeyboardInterrupt:
 			pass
 
-		if io_channel == 1: #Used during setup, runs prbs serial out on all uart channels not needed regularly
+		if False : #io_channel == 1: #Used during setup, runs prbs serial out on all uart channels not needed regularly
 			#while verified == False: 
 			chip = list(c.chips.values())[0] # selects 1st chip in chain
 			c[chip.chip_key].config.enable_posi = [1,1,1,1]
@@ -593,7 +593,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 		c.run(0.1,'test')
 		#print(c.reads[-1])
 		print("read ",len(c.reads[-1])," packets")
-		#wait_here()
+		wait_here()
 		loop=loop+1
 
 
@@ -673,7 +673,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	#print(chip.config)
 	print("Starting ReadChannelLoop...")
 
-	Monitor = 0 # display analog mon (1) or not (0) 
+	Monitor = 1 # display analog mon (1) or not (0) 
 	ReadChannelLoop(c,chip,0,NumASICchannels-1,Monitor)
 
 	print("the end")
