@@ -103,6 +103,23 @@ def init_board(c,io_chan=1):
 
 	c.io.ping()
 
+def init_board_base(c,_default_io_channel=1):
+	##### default network (single chip) if no hydra network provided
+	_default_chip_id = 2
+	_default_miso_ds = _default_io_channel -1 #0
+	_default_mosi = _default_io_channel -1 #0
+
+	##### setup hydra network configuration
+	#if controller_config is None:
+	c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id))
+	c.add_network_node(1, _default_io_channel, c.network_names, 'ext', root=True)
+	c.add_network_link(1, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
+	c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+	c.add_network_link(1, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
+	#else:
+	#c.load(controller_config)
+
+
 def measure_currents(c):
 	loop=0
 	looplimit=2
@@ -289,28 +306,45 @@ def test_config_registers(c,chip):
 	return 0
 
 def init_chips(c):
-	#zero supply voltages
-	c.io.set_vddd(0) # set vddd 0V
-	c.io.set_vdda(0) # set vdda 0V
-	
-	time.sleep(1)
-	#Set correct voltages
-	c.io.set_vddd() # set default vddd (~1.8V)
-	c.io.set_vdda() # set default vdda (~1.8V)
-	# Disable Tile
-	c.io.disable_tile()
 
-	# Enable Tile 
-	c.io.enable_tile()
+	PacmanVersion = 'RevS1'
 
-	# measure_currents and voltage
-	vddd,iddd = c.io.get_vddd()[1]
-	vdda,idda = c.io.get_vdda()[1]
-	print('VDDD:',vddd,'mV')
-	print('IDDD:',iddd,'mA')
-	print('VDDA:',vdda,'mV')
-	print('IDDA:',idda,'mA')
+	if PacmanVersion == 'RevS1' :
+		#c.io.set_reg(0x25014, 0) # enables analog monitor from tile 1 on SMA A
+		c.io.set_reg(0x25014, 0x10) # disables analog monitor from all tiles on SMA A
+		c.io.set_reg(0x25015, 0x10) # disables SMA B
+        	#PACMAN RevS1 powerup settings
+		vddd = 43875
+		vdda = 43875
+		c.io.set_reg(0x00024130, vdda) # tile 1 VDDA
+		c.io.set_reg(0x00024131, vddd) # tile 1 VDDD
+		c.io.set_reg(0x00000014, 1) # enable global larpix power
+		c.io.set_reg(0x00000010, 0b00000001) # enable tiles to be powered
 
+	else: # older pacman4 version
+		#zero supply voltages
+		c.io.set_vddd(0) # set vddd 0V
+		c.io.set_vdda(0) # set vdda 0V
+		
+		time.sleep(1)
+		#Set correct voltages
+		c.io.set_vddd() # set default vddd (~1.8V)
+		c.io.set_vdda() # set default vdda (~1.8V)
+		# Disable Tile
+		c.io.disable_tile()
+
+		# Enable Tile 
+		c.io.enable_tile()
+
+		# measure_currents and voltage
+		vddd,iddd = c.io.get_vddd()[1]
+		vdda,idda = c.io.get_vdda()[1]
+		print('VDDD:',vddd,'mV')
+		print('IDDD:',iddd,'mA')
+		print('VDDA:',vdda,'mV')
+		print('IDDA:',idda,'mA')
+
+	# Is this a v2b setting?  May have to bypass for v2a testing
 	_uart_phase = 0
 	for ch in range(1,5):
 		c.io.set_reg(0x1000*ch + 0x2014, _uart_phase)
@@ -680,7 +714,13 @@ def get_baseline_periodicselftrigger(c,chip):
 	run_Popen=True
 	if run_Popen :
 		# Run socket_baselines in subprocess to allow killing
-		cmd=['python socket_baselines.py']
+		#cmd=['python socket_baselines.py']
+		if v2bState.get() == '0':
+			cmd=['python socket_baselines_v2astd.py']
+		elif v2bState.get() == '1':
+			cmd=['python socket_baselines_v2bstd.py']
+		else:
+			print('*** Not running v2a or v2b specific baselines, No idea quality of results ***')
 		start_time=time.time()
 		with Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
@@ -922,7 +962,7 @@ def get_ThreshLevels(c,chip):
 	RateThreshFrame.to_hdf("RateThresh.h5",mode='a',key='RateVsThreshV1')
 
 def RunControl():
-	HOST = '192.168.12.138'  # apdlab pc interface address 
+	HOST = '192.168.12.139'  # apdlab pc interface address 
 	PORT = 38630        # Port to listen on (non-privileged ports are > 1023)
 
 	Hello='H\r'
@@ -1043,7 +1083,8 @@ def RunTests():
 		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
 		c=init_controller()
 		#init_board(c) # defaults to channel 1
-		init_board(c,io_channel)
+		#init_board(c,io_channel)
+		init_board_base(c,io_channel)
 		chip=init_chips(c)	 
 		print(chip)
 		if chip == None : 
@@ -1144,10 +1185,19 @@ def RunTests():
 	#chip.config.periodic_reset_cycles=1000000 # 200ms
 	#chip.config.periodic_reset_cycles=10000000 # 2s
 
+	#v2b defaults for socket tester
 	#set ref vcm  (77 def = 0.54V)
 	chip.config.vcm_dac=45
 	#set ref vref  ( 219 def = 1.54V)
 	chip.config.vref_dac=187
+
+	# setting for v2a 
+	# 77 too high, all are at 0, 50 sent some down to zero, 
+	# try 40 still a few close to 0, try 35, that looks comfortable
+	#set ref vcm  (77 def = 0.54V)
+	chip.config.vcm_dac=35
+	#set ref vref  ( 219 def = 1.54V)
+	chip.config.vref_dac=177
 	#set ref current.  (11 for RT, 16 for cryo)
 	#chip.config.ref_current_trim=16
 	#set ibias_csa  (8 for default, range [0-15])
