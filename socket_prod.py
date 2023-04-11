@@ -57,8 +57,15 @@ TileChannelMask
 
 def init_controller():
 	c = Controller()
+	if v2bState.get() == '0':
 	#c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
-	c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman.json')
+		print('Intializing pacman20 for v2a')
+		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
+	elif v2bState.get() == '1':
+		print('Intializing pacman4 for v2b')
+		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json')
+	else:
+		exit('v2bState not specified, exiting...')
 	c.io.ping()
 	return c
 
@@ -111,7 +118,10 @@ def init_board_base(c,_default_io_channel=1):
 
 	##### setup hydra network configuration
 	#if controller_config is None:
-	c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id))
+	if v2bState.get() == '0':
+		c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id))
+	elif v2bState.get() == '1':
+		c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id),version='2b')
 	c.add_network_node(1, _default_io_channel, c.network_names, 'ext', root=True)
 	c.add_network_link(1, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
 	c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
@@ -307,7 +317,8 @@ def test_config_registers(c,chip):
 
 def init_chips(c):
 
-	PacmanVersion = 'RevS1'
+	#PacmanVersion = 'RevS1'
+	PacmanVersion = 'pacman4'
 
 	if PacmanVersion == 'RevS1' :
 		#c.io.set_reg(0x25014, 0) # enables analog monitor from tile 1 on SMA A
@@ -732,7 +743,7 @@ def get_baseline_periodicselftrigger(c,chip):
 				print(line, end='') # process line here
 				dt=time.time()-start_time
 				#print('dt=',dt)
-				if dt > 15 : 
+				if dt > 30 : 
 					# PID of process sent as first output (set in socket_baselines.py)
 					print('mypid socket_baselines is ',mypid)
 					os.kill(int(mypid),signal.SIGKILL)
@@ -1185,23 +1196,26 @@ def RunTests():
 	#chip.config.periodic_reset_cycles=1000000 # 200ms
 	#chip.config.periodic_reset_cycles=10000000 # 2s
 
-	#v2b defaults for socket tester
-	#set ref vcm  (77 def = 0.54V)
-	chip.config.vcm_dac=45
-	#set ref vref  ( 219 def = 1.54V)
-	chip.config.vref_dac=187
-
-	# setting for v2a 
-	# 77 too high, all are at 0, 50 sent some down to zero, 
-	# try 40 still a few close to 0, try 35, that looks comfortable
-	#set ref vcm  (77 def = 0.54V)
-	chip.config.vcm_dac=35
-	#set ref vref  ( 219 def = 1.54V)
-	chip.config.vref_dac=177
-	#set ref current.  (11 for RT, 16 for cryo)
-	#chip.config.ref_current_trim=16
-	#set ibias_csa  (8 for default, range [0-15])
-	#chip.config.ibias_csa=12
+	if v2bState.get() == '1':
+		#v2b defaults for socket tester
+		#set ref vcm  (77 def = 0.54V)
+		chip.config.vcm_dac=45
+		#set ref vref  ( 219 def = 1.54V)
+		chip.config.vref_dac=187
+	elif v2bState.get() == '0':
+		# setting for v2a 
+		# 77 too high, all are at 0, 50 sent some down to zero, 
+		# try 40 still a few close to 0, try 35, that looks comfortable
+		#set ref vcm  (77 def = 0.54V)
+		chip.config.vcm_dac=35
+		#set ref vref  ( 219 def = 1.54V)
+		chip.config.vref_dac=177
+		#set ref current.  (11 for RT, 16 for cryo)
+		#chip.config.ref_current_trim=16
+		#set ibias_csa  (8 for default, range [0-15])
+		#chip.config.ibias_csa=12
+	else:
+		print('*** Not running v2a or v2b specific vcm and vref, using defaults ***')
 
 	chip.config.pixel_trim_dac = [31] * NumASICchannels
 
@@ -1367,13 +1381,13 @@ def trygui():
 		#print('numChipVar = ',numChipVar)
 		if int(numChipVar.get()) > len(mychipIDBox):
 			for ChipNum in range(len(mychipIDBox)+1,int(numChipVar.get())+1):
-				print(ChipNum)
+				#print(ChipNum)
 				mychipIDBox.append(ttk.Entry(SNframe,width=8))
 				mychipIDBox[ChipNum-1].grid(column=4,
 					row=ChipNum,sticky='E',padx=10) 
 		if int(numChipVar.get()) < len(mychipIDBox):
 			for ChipNum in range(len(mychipIDBox),int(numChipVar.get()),-1):
-				print(ChipNum)
+				#print(ChipNum)
 				mychipIDBox[ChipNum-1].state(['disabled'])
 		for ChipNum in range(1,int(numChipVar.get())+1):
 			mychipIDBox[ChipNum-1].state(['!disabled'])
