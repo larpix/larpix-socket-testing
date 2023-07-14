@@ -325,8 +325,12 @@ def init_chips(c):
 		c.io.set_reg(0x25014, 0x10) # disables analog monitor from all tiles on SMA A
 		c.io.set_reg(0x25015, 0x10) # disables SMA B
         	#PACMAN RevS1 powerup settings
-		vddd = 43875
-		vdda = 43875
+		if v2cState.get() == '1' :
+			vddd = 29250
+			vdda = 29250
+		else : 
+			vddd = 43875
+			vdda = 43875
 		c.io.set_reg(0x00024130, vdda) # tile 1 VDDA
 		c.io.set_reg(0x00024131, vddd) # tile 1 VDDD
 		c.io.set_reg(0x00000014, 1) # enable global larpix power
@@ -339,8 +343,12 @@ def init_chips(c):
 		
 		time.sleep(1)
 		#Set correct voltages
-		c.io.set_vddd() # set default vddd (~1.8V)
-		c.io.set_vdda() # set default vdda (~1.8V)
+		if v2cState.get() == '1' :
+			c.io.set_vddd(vddd_dac=0x8E6C)
+			c.io.set_vdda(vdda_dac=0x8E6C)                        
+		else:
+			c.io.set_vddd() # set default vddd (~1.8V)
+			c.io.set_vdda() # set default vdda (~1.8V)
 		# Disable Tile
 		c.io.disable_tile()
 
@@ -1084,6 +1092,7 @@ def RunTests():
 	dset.attrs['UseTCPIPControl']=UseTCPIPControlState.get()
 	dset.attrs['LoadHTMLplot']=LoadHTMLplotsState.get()
 	dset.attrs['v2bASIC']=v2bState.get()
+	dset.attrs['v2cASIC']=v2cState.get()
 	dset.attrs['SNAutoUp']=SNAutoIncrement.get()
 	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
@@ -1357,6 +1366,14 @@ def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end 
 	#print("UseTCPIPControl=",UseTCPIPControlState.get())
 	return
 
+def Togglev2c(): # Set and unset v2c, force v2b if v2c is selected.
+	# Toggle
+	#print(v2bState.get(),v2cState.get())
+	if v2cState.get()== '1' :
+		if v2bState.get()== '0' :
+			v2bState.set('1')
+	return
+
 def trygui():
 	#window = tk.Tk()
 	#global runPeriodicBaseline
@@ -1464,6 +1481,13 @@ def trygui():
 		variable=v2bState) #, command=v2b)
 	v2bBtn.grid(column=3,row=2,padx=20)
 
+	global v2cState
+	v2cState=tk.StringVar()
+	v2cState.set(0)
+	v2cBtn= ttk.Checkbutton(SNframe,text="v2c ASIC",
+		                variable=v2cState, command=Togglev2c) #, command=v2b)
+	v2cBtn.grid(column=4,row=2,padx=20)
+
 	global SNAutoIncrement
 	SNAutoIncrement=tk.StringVar()
 	SNAutoIncrement.set(0)
@@ -1476,7 +1500,7 @@ def trygui():
 	SNfromFile.set(0)
 	SNfromFileBtn= ttk.Checkbutton(SNframe,text="Use SN File",
 		variable=SNfromFile, command=UseSNFile)
-	SNfromFileBtn.grid(column=4,row=2,padx=10)
+	SNfromFileBtn.grid(column=5,row=2,padx=10)
 
 	SNUpBtn= ttk.Button(SNframe,text="SN Up",command=SNUp)
 	SNUpBtn.grid(column=5,row=0)
@@ -1504,6 +1528,7 @@ def trygui():
 	UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
 	LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
 	v2bState.set(dset.attrs['v2bASIC'])
+	v2cState.set(dset.attrs['v2cASIC'])
 	SNAutoIncrement.set(dset.attrs['SNAutoUp'])
 	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
