@@ -327,7 +327,7 @@ def init_chips(c):
         	#PACMAN RevS1 powerup settings
 		if v2cState.get() == '1' :
 			vddd = 29250
-			vdda = 29250
+			vdda = 43875
 		else : 
 			vddd = 43875
 			vdda = 43875
@@ -344,8 +344,8 @@ def init_chips(c):
 		time.sleep(1)
 		#Set correct voltages
 		if v2cState.get() == '1' :
-			c.io.set_vddd(vddd_dac=0x8E6C)
-			c.io.set_vdda(vdda_dac=0x8E6C)                        
+			c.io.set_vddd(vddd_dac=0x8E6C) # set low vddd for v2c(1.2V)
+			c.io.set_vdda() # set default vdda (~1.8V)
 		else:
 			c.io.set_vddd() # set default vddd (~1.8V)
 			c.io.set_vdda() # set default vdda (~1.8V)
