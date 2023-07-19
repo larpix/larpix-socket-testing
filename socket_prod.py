@@ -69,7 +69,7 @@ def init_controller():
 	c.io.ping()
 	return c
 
-def init_board(c,io_chan=1):
+def init_board_unused(c,io_chan=1):
 	#c.load('../configs/controller/pcb-3_chip_info.json')
 	#c.load('../configs/controller/socket-board-v1.json')
 	if v2bState.get() == '0':
@@ -125,6 +125,14 @@ def init_board_base(c,_default_io_channel=1):
 	c.add_network_node(1, _default_io_channel, c.network_names, 'ext', root=True)
 	c.add_network_link(1, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
 	c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+	'''
+	if v2cState.get() == '0':
+		c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+	else:
+		for _default_miso_ds in [ 0xF ] :
+			print('configing for _default_miso_ds of ',_default_miso_ds)
+			c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+	'''
 	c.add_network_link(1, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
 	#else:
 	#c.load(controller_config)
@@ -512,7 +520,12 @@ def init_chips(c):
 
 
 	print('Writing configuration')
-	#while True: 
+	#while True:
+	if v2cState.get() == '1' :
+		print(c[chip.chip_key].config.enable_piso_downstream) 
+		c[chip.chip_key].config.enable_piso_downstream=[1]*4
+		print(c[chip.chip_key].config.enable_piso_downstream)
+
 	for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
 	for chip in c.chips.values(): c.verify_configuration(chip.chip_key)
