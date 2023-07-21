@@ -22,6 +22,11 @@ import tcp_server_prod as tsp
 import csv
 #import t
 global SNList
+global PacmanVersion
+PacmanVersion = 'RevS1'
+#PacmanVersion = 'pacman4'
+
+
 SNList = []
 
 
@@ -57,15 +62,21 @@ TileChannelMask
 
 def init_controller():
 	c = Controller()
-	if v2bState.get() == '0':
+	if PacmanVersion == 'RevS1' :
 	#c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
-		print('Intializing pacman20 for v2a')
-		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
-	elif v2bState.get() == '1':
-		print('Intializing pacman4 for v2b')
+		if v2bState.get() == '0' :
+			print('Intializing pacman20 RevS1 for v2a on tile 1')
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
+		elif v2bState.get() == '1' :
+			print('Intializing pacman20 RevS1 for v2b or c on tile 2')
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20_2.json')
+		else:
+			exit('RevS1 without v2bState defined')
+	elif PacmanVersion == 'pacman4': 
+		print('Intializing pacman4 ')
 		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json')
 	else:
-		exit('v2bState not specified, exiting...')
+		exit('PacmanVersion not specified, exiting...')
 	c.io.ping()
 	return c
 
@@ -118,13 +129,17 @@ def init_board_base(c,_default_io_channel=1):
 
 	##### setup hydra network configuration
 	#if controller_config is None:
+	if PacmanVersion == 'RevS1' and v2bState.get() == '1':
+		Tile_ID = 2
+	else:
+		Tile_ID = 1
 	if v2bState.get() == '0':
-		c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id))
+		c.add_chip(larpix.Key(Tile_ID, _default_io_channel, _default_chip_id))
 	elif v2bState.get() == '1':
-		c.add_chip(larpix.Key(1, _default_io_channel, _default_chip_id),version='2b')
-	c.add_network_node(1, _default_io_channel, c.network_names, 'ext', root=True)
-	c.add_network_link(1, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
-	c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+		c.add_chip(larpix.Key(Tile_ID, _default_io_channel, _default_chip_id),version='2b')
+	c.add_network_node(Tile_ID, _default_io_channel, c.network_names, 'ext', root=True)
+	c.add_network_link(Tile_ID, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
+	c.add_network_link(Tile_ID, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
 	'''
 	if v2cState.get() == '0':
 		c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
@@ -133,7 +148,7 @@ def init_board_base(c,_default_io_channel=1):
 			print('configing for _default_miso_ds of ',_default_miso_ds)
 			c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
 	'''
-	c.add_network_link(1, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
+	c.add_network_link(Tile_ID, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
 	#else:
 	#c.load(controller_config)
 
@@ -325,9 +340,6 @@ def test_config_registers(c,chip):
 
 def init_chips(c):
 
-	#PacmanVersion = 'RevS1'
-	PacmanVersion = 'pacman4'
-
 	if PacmanVersion == 'RevS1' :
 		#c.io.set_reg(0x25014, 0) # enables analog monitor from tile 1 on SMA A
 		c.io.set_reg(0x25014, 0x10) # disables analog monitor from all tiles on SMA A
@@ -339,10 +351,16 @@ def init_chips(c):
 		else : 
 			vddd = 43875
 			vdda = 43875
-		c.io.set_reg(0x00024130, vdda) # tile 1 VDDA
-		c.io.set_reg(0x00024131, vddd) # tile 1 VDDD
-		c.io.set_reg(0x00000014, 1) # enable global larpix power
-		c.io.set_reg(0x00000010, 0b00000001) # enable tiles to be powered
+		if v2bState.get() == '1':  # use tile 2 for v2b or v2c for RevS1 pacam
+			c.io.set_reg(0x00024132, vdda) # tile 2 VDDA
+			c.io.set_reg(0x00024133, vddd) # tile 2 VDDD
+			c.io.set_reg(0x00000014, 1) # enable global larpix power
+			c.io.set_reg(0x00000010, 0b00000010) # enable tile 2 to be powered
+		else: # use tile 1 for v2a for RevS1 pacman 
+			c.io.set_reg(0x00024130, vdda) # tile 1 VDDA
+			c.io.set_reg(0x00024131, vddd) # tile 1 VDDD
+			c.io.set_reg(0x00000014, 1) # enable global larpix power
+			c.io.set_reg(0x00000010, 0b00000001) # enable tile 1 to be powered
 
 	else: # older pacman4 version
 		#zero supply voltages
@@ -387,7 +405,7 @@ def init_chips(c):
 	#if v2bState.get() == '0':
 	for io_group, io_channels in c.network.items():
 		for io_channel in io_channels:
-			print('set uart speed on channel',io_channel,'...')
+			print('set uart speed on group ',io_group,' on channel',io_channel,'...')
 			c.io.set_uart_clock_ratio(io_channel, 2, io_group=io_group)
 
 	# First bring up the network using as few packets as possible
@@ -452,6 +470,12 @@ def init_chips(c):
 		#print('Brooke power up complete')
 		#print('Writing configuration')
 		#while True:
+		for chip in c.chips.values():
+			if v2cState.get() == '1' :
+				print(c[chip.chip_key].config.enable_piso_downstream) 
+				c[chip.chip_key].config.enable_piso_downstream=[1]*4
+				print(c[chip.chip_key].config.enable_piso_downstream)
+
 		for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
 		for chip in c.chips.values(): 
