@@ -64,14 +64,8 @@ def init_controller():
 	c = Controller()
 	if PacmanVersion == 'RevS1' :
 	#c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
-		if v2bState.get() == '0' :
-			print('Intializing pacman20 RevS1 for v2a on tile 1')
-			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
-		elif v2bState.get() == '1' :
-			print('Intializing pacman20 RevS1 for v2b or c on tile 2')
-			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20_2.json')
-		else:
-			exit('RevS1 without v2bState defined')
+		print('Intializing pacman20 RevS1')
+		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
 	elif PacmanVersion == 'pacman4': 
 		print('Intializing pacman4 ')
 		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json')
@@ -122,24 +116,26 @@ def init_board_unused(c,io_chan=1):
 	c.io.ping()
 
 def init_board_base(c,_default_io_channel=1):
-	##### default network (single chip) if no hydra network provided
-	_default_chip_id = 2
-	_default_miso_ds = _default_io_channel -1 #0
-	_default_mosi = _default_io_channel -1 #0
-
 	##### setup hydra network configuration
 	#if controller_config is None:
 	if PacmanVersion == 'RevS1' and v2bState.get() == '1':
 		Tile_ID = 2
 	else:
 		Tile_ID = 1
+	##### default network (single chip) if no hydra network provided
+	_default_io_group = 1
+	_default_chip_id = 2
+	_default_miso_ds = _default_io_channel -1 #0
+	_default_mosi = _default_io_channel -1 #0
+	_default_io_channel = 4*(Tile_ID-1) + _default_io_channel
+
 	if v2bState.get() == '0':
-		c.add_chip(larpix.Key(Tile_ID, _default_io_channel, _default_chip_id))
+		c.add_chip(larpix.Key(_default_io_group, _default_io_channel, _default_chip_id))
 	elif v2bState.get() == '1':
-		c.add_chip(larpix.Key(Tile_ID, _default_io_channel, _default_chip_id),version='2b')
-	c.add_network_node(Tile_ID, _default_io_channel, c.network_names, 'ext', root=True)
-	c.add_network_link(Tile_ID, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
-	c.add_network_link(Tile_ID, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
+		c.add_chip(larpix.Key(_default_io_group, _default_io_channel, _default_chip_id),version='2b')
+	c.add_network_node(_default_io_group, _default_io_channel, c.network_names, 'ext', root=True)
+	c.add_network_link(_default_io_group, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
+	c.add_network_link(_default_io_group, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
 	'''
 	if v2cState.get() == '0':
 		c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
@@ -148,7 +144,7 @@ def init_board_base(c,_default_io_channel=1):
 			print('configing for _default_miso_ds of ',_default_miso_ds)
 			c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
 	'''
-	c.add_network_link(Tile_ID, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
+	c.add_network_link(_default_io_group, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
 	#else:
 	#c.load(controller_config)
 
