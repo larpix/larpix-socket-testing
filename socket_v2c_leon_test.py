@@ -68,7 +68,17 @@ def conf_root(c,cm,cadd,iog,iochan):
     c.write_configuration(cm, 'i_rx3')
     c[cm].config.r_term3=R_TERM
     c.write_configuration(cm, 'r_term3')
-    c[cm].config.enable_posi=[1,1,1,1] # all
+    #c[cm].config.enable_posi=[1,1,1,1] # all
+    if iochan%4 == 1:  
+        c[cm].config.enable_posi=[1,0,0,0] # posi1 ds for probe 
+    elif iochan%4 == 2:
+        c[cm].config.enable_posi=[0,1,0,0] # posi2 ds for probe 
+    elif iochan%4 ==3:
+        c[cm].config.enable_posi=[0,0,1,0] # posi3 ds for probe 
+    elif iochan%4 ==0:
+        c[cm].config.enable_posi=[0,0,0,1] # posi4 ds for probe 
+    else :
+        print('confused by iochan ',iochan)
     #c[cm].config.enable_posi=[1,0,0,0] # posi 1
     #c[cm].config.enable_posi=[0,1,0,0] # posi 2
     #c[cm].config.enable_posi=[0,0,1,0] # posi 3
@@ -124,7 +134,7 @@ def main():
     IO_GROUP = 1
     PACMAN_TILE = 2
     #IO_CHAN = (1+(PACMAN_TILE-1)*4)
-    IO_CHAN = 8
+    IO_CHAN = 5
     #VDDA_DAC= 44500 # ~1.8 V
     #VDDD_DAC = 28500 # ~1.1 V
     VDDA_DAC = 44500
