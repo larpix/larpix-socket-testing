@@ -376,6 +376,7 @@ def init_chips(c):
 
 		# Enable Tile 
 		c.io.enable_tile()
+		time.sleep(1)
 
 		# measure_currents and voltage
 		vddd,iddd = c.io.get_vddd()[1]
@@ -471,6 +472,7 @@ def init_chips(c):
 				print(c[chip.chip_key].config.enable_piso_downstream) 
 				c[chip.chip_key].config.enable_piso_downstream=[1]*4
 				print(c[chip.chip_key].config.enable_piso_downstream)
+				c.write_configuration(chip.chip_key,'enable_piso_downstream')
 
 		for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
@@ -541,6 +543,7 @@ def init_chips(c):
 
 	print('Writing configuration')
 	#while True:
+	print(c[chip.chip_key].config.enable_piso_downstream) 
 	if v2cState.get() == '1' :
 		print(c[chip.chip_key].config.enable_piso_downstream) 
 		c[chip.chip_key].config.enable_piso_downstream=[1]*4

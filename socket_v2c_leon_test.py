@@ -220,6 +220,9 @@ def main():
                 continue
             if msg.chip_id <255:
                 print(msg.chip_id)
+        c.write_configuration(chip11_key)
+        verified,returnregisters=c.verify_configuration(chip11_key)
+        print(verified,returnregisters)
 
         time.sleep(0.1)
     return c, c.io
