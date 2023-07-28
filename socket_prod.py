@@ -334,6 +334,191 @@ def test_config_registers(c,chip):
 	print("config with flipped bits succeeded")
 	return 0
 
+def conf_root(c,cm,cadd,iog,iochan):
+	I_TX_DIFF=0
+	TX_SLICE=15
+	R_TERM=2
+	I_RX=8
+	#REF_CURRENT_TRIM = 0
+	REF_CURRENT_TRIM = 15
+
+	c.add_chip(cm,version='2b')
+	#  - - default larpix chip_id is '1'
+	default_key = larpix.key.Key(iog, iochan, 1) # '1-5-1'
+	c.add_chip(default_key,version='2b') # TODO, create v2c class
+	#  - - rename to chip_id = cm
+	c[default_key].config.chip_id = cadd
+	c.write_configuration(default_key,'chip_id')
+	#  - - remove default chip id from the controller
+	c.remove_chip(default_key)
+	#  - - and add the new chip id
+	#print('cm = ',cm)
+
+	c[cm].config.chip_id=cadd
+
+	c[cm].config.i_rx0=I_RX
+	c.write_configuration(cm, 'i_rx0')
+	c[cm].config.r_term0=R_TERM
+	c.write_configuration(cm, 'r_term0')
+
+	c[cm].config.i_rx1=I_RX
+	c.write_configuration(cm, 'i_rx1')
+	c[cm].config.r_term1=R_TERM
+	c.write_configuration(cm, 'r_term1')
+
+	c[cm].config.i_rx2=I_RX
+	c.write_configuration(cm, 'i_rx2')
+	c[cm].config.r_term2=R_TERM
+	c.write_configuration(cm, 'r_term2')
+
+	c[cm].config.i_rx3=I_RX
+	c.write_configuration(cm, 'i_rx3')
+	c[cm].config.r_term3=R_TERM
+	c.write_configuration(cm, 'r_term3')
+	#c[cm].config.enable_posi=[1,1,1,1] # all
+	if iochan%4 == 1:  
+		c[cm].config.enable_posi=[1,0,0,0] # posi1 ds for probe 
+	elif iochan%4 == 2:
+		c[cm].config.enable_posi=[0,1,0,0] # posi2 ds for probe 
+	elif iochan%4 ==3:
+		c[cm].config.enable_posi=[0,0,1,0] # posi3 ds for probe 
+	elif iochan%4 ==0:
+		c[cm].config.enable_posi=[0,0,0,1] # posi4 ds for probe 
+	else :
+		print('confused by iochan ',iochan)
+	#c[cm].config.enable_posi=[1,0,0,0] # posi 1
+	#c[cm].config.enable_posi=[0,1,0,0] # posi 2
+	#c[cm].config.enable_posi=[0,0,1,0] # posi 3
+	#c[cm].config.enable_posi=[0,0,0,1] # posi 4
+	c.write_configuration(cm, 'enable_posi')
+	c[cm].config.enable_piso_upstream=[0,0,0,0]
+	c.write_configuration(cm, 'enable_piso_upstream')
+	c[cm].config.i_tx_diff0=I_TX_DIFF
+	c.write_configuration(cm, 'i_tx_diff0')
+	c[cm].config.tx_slices0=TX_SLICE
+	c.write_configuration(cm, 'tx_slices0')
+	c[cm].config.i_tx_diff2=I_TX_DIFF
+	c.write_configuration(cm, 'i_tx_diff2')
+	c[cm].config.tx_slices2=TX_SLICE
+	c.write_configuration(cm, 'tx_slices2')
+	c[cm].config.i_tx_diff3=I_TX_DIFF
+	c.write_configuration(cm, 'i_tx_diff3')
+	c[cm].config.tx_slices3=TX_SLICE
+	c.write_configuration(cm, 'tx_slices3')
+	c[cm].config.i_tx_diff1=I_TX_DIFF
+	c.write_configuration(cm, 'i_tx_diff1')
+	c[cm].config.tx_slices1=TX_SLICE
+	c.write_configuration(cm, 'tx_slices1')
+	#c.io.set_reg(0x18, 1, io_group=1)
+	c[cm].config.enable_piso_downstream=[1,1,1,1] # krw adding May 8, 2023
+	c.write_configuration(cm, 'enable_piso_downstream')
+	time.sleep(0.1)
+	#c[cm].config.enable_piso_downstream=[1,0,0,1] # piso1 ds for probe
+	if iochan%4 == 1:  
+		c[cm].config.enable_piso_downstream=[1,0,0,0] # piso1 ds for probe 
+	elif iochan%4 == 2:
+		c[cm].config.enable_piso_downstream=[0,1,0,0] # piso2 ds for probe 
+	elif iochan%4 ==3:
+		c[cm].config.enable_piso_downstream=[0,0,1,0] # piso3 ds for probe 
+	elif iochan%4 ==0:
+		c[cm].config.enable_piso_downstream=[0,0,0,1] # piso4 ds for probe 
+	else :
+		print('confused by iochan ',iochan)
+	c.write_configuration(cm, 'enable_piso_downstream')
+	time.sleep(0.1)
+	# enable pacman uart receiver
+	rx_en = c.io.get_reg(0x18, iog)
+	ch_set=pow(2,iochan-1)
+	#ch_set=15
+	print('enable pacman uart receiver', rx_en, ch_set, rx_en|ch_set)
+	c.io.set_reg(0x18, rx_en|ch_set, iog)
+	#rx_en = c.io.get_reg(0x18, iog)
+	#print('rx_en ',rx_en)
+
+	#print('c.chips')
+	#print(c.chips)
+
+def init_chips_v2c(c,io_channel):
+	###########################################
+	IO_GROUP = 1
+	PACMAN_TILE = 2  # Assuming Pacman RevS1 (uses tile 2 for v2b,v2c and tile 1 for v2a)
+	IO_CHAN = (io_channel+(PACMAN_TILE-1)*4)
+	#VDDA_DAC= 44500 # ~1.8 V
+	#VDDD_DAC = 28500 # ~1.1 V
+	VDDA_DAC = 44500
+	VDDD_DAC = 30000
+	RESET_CYCLES = 300000 #5000000
+
+	REF_CURRENT_TRIM=0
+	###########################################
+
+	# create a larpix controller
+	# Already done in init_controller()
+	#c = larpix.Controller()
+	#c.io = larpix.io.PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json', relaxed=True)
+	io_group=IO_GROUP
+	chip_id=2
+
+	do_power_cycle = True
+
+	if do_power_cycle:
+		#disable pacman rx uarts
+		#print('enable pacman power')
+		bitstring = list('00000000000000000000000000000000')
+		#print(int("".join(bitstring),2))
+		c.io.set_reg(0x18, int("".join(bitstring),2), io_group)
+		# disable tile power, LARPIX clock
+		c.io.set_reg(0x00000010, 0, io_group)
+		# set up mclk in pacman
+		c.io.set_reg(0x101c, 0x4, io_group)
+		
+		# enable pacman power
+		c.io.set_reg(0x00000014, 1, io_group)
+		#set voltage dacs to 0V  
+		c.io.set_reg(0x24010+(PACMAN_TILE-1), 0, io_group)
+		c.io.set_reg(0x24020+(PACMAN_TILE-1), 0, io_group)
+		#time.sleep(0.1)
+		time.sleep(1)
+		#set voltage dacs  VDDD first 
+		c.io.set_reg(0x24020+(PACMAN_TILE-1), VDDD_DAC, io_group)
+		c.io.set_reg(0x24010+(PACMAN_TILE-1), VDDA_DAC, io_group)
+		
+
+		#print('reset the larpix for n cycles',RESET_CYCLES)
+		#   - set reset cycles
+		c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
+		#   - toggle reset bit
+		clk_ctrl = c.io.get_reg(0x1010, io_group=IO_GROUP)
+		c.io.set_reg(0x1010, clk_ctrl|4, io_group=IO_GROUP)
+		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
+		
+		#enable tile power
+		tile_enable_val=pow(2,PACMAN_TILE-1)+0x0200  #enable one tile at a time	
+		c.io.set_reg(0x00000010,tile_enable_val,io_group)
+		time.sleep(0.03)
+		#print('enable tilereg 0x10 , ', tile_enable_val)
+		#readback=pacman_base.power_readback(c.io, io_group, pacman_version,pacman_tile)
+
+		#   - toggle reset bit
+		RESET_CYCLES = 50000
+		c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
+		clk_ctrl = c.io.get_reg(0x1010, io_group=IO_GROUP)
+		c.io.set_reg(0x1010, clk_ctrl|4, io_group=IO_GROUP)
+		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
+		time.sleep(0.01)
+
+	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)
+	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+	c.write_configuration(chip_key)
+	verified,returnregisters=c.verify_configuration(chip_key)
+	print(verified,returnregisters)
+	#print('list(c.chips.values()= ',list(c.chips.values()))
+	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
+	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
+	chip = list(c.chips.values())[0] # selects 1st chip in chain
+
+	return chip
+
 def init_chips(c):
 
 	if PacmanVersion == 'RevS1' :
@@ -345,7 +530,7 @@ def init_chips(c):
 			vddd = 29250
 			vdda = 43875
 		else : 
-			vddd = 43875
+			vddd = 43785
 			vdda = 43875
 		if v2bState.get() == '1':  # use tile 2 for v2b or v2c for RevS1 pacam
 			c.io.set_reg(0x00024132, vdda) # tile 2 VDDA
@@ -1137,12 +1322,22 @@ def RunTests():
 	init_chip_results=0
 	for io_channel in [4,3,2,1]: 
 		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
-		c=init_controller()
-		#init_board(c) # defaults to channel 1
-		#init_board(c,io_channel)
-		init_board_base(c,io_channel)
-		chip=init_chips(c)	 
+		c=init_controller() # create a new clean controller instance
+		chip = 0
+		if v2cState.get() == '0' : # run working intialization of v2b and v2a chips
+			#init_board(c) # defaults to channel 1
+			#init_board(c,io_channel)
+			init_board_base(c,io_channel)
+			chip=init_chips(c)	 
+		elif v2cState.get() == '1': # run v2c specific chip initialization. (should work for v2b also)
+			chip = init_chips_v2c(c,io_channel) # does work of init_board_base and init_chips
+		else: 
+			print('can not get v2cState.get()')
 		print(chip)
+		#print('c.chips after init board/chip')
+		#print(c.chips)
+		#print(chip.config)
+		#exit() 
 		if chip == None : 
 			print('Failed in init_chips for io_channel ',io_channel)
 			init_chip_results=init_chip_results+pow(2,(io_channel-1))
