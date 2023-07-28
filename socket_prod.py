@@ -352,21 +352,9 @@ def conf_root(c,cm,cadd,iog,iochan):
 	#  - - remove default chip id from the controller
 	c.remove_chip(default_key)
 	#  - - and add the new chip id
-	print('cm = ',cm)
+	#print('cm = ',cm)
 
 	c[cm].config.chip_id=cadd
-
-	#if iochan == 8:
-	if False:
-		print('maximum ref current trim')
-		# krw, try increasing reference current for cold ops
-		c[cm].config.ref_current_trim=REF_CURRENT_TRIM
-		c.write_configuration(cm, 'ref_current_trim')
-		c[cm].config.current_monitor_bank0=[0,0,0,1]
-		c.write_configuration(cm, 'current_monitor_bank0')
-		c[cm].config.ibias_csa=8
-		c.write_configuration(cm, 'ibias_csa')
-
 
 	c[cm].config.i_rx0=I_RX
 	c.write_configuration(cm, 'i_rx0')
@@ -447,8 +435,8 @@ def conf_root(c,cm,cadd,iog,iochan):
 	#rx_en = c.io.get_reg(0x18, iog)
 	#print('rx_en ',rx_en)
 
-	print('c.chips')
-	print(c.chips)
+	#print('c.chips')
+	#print(c.chips)
 
 def init_chips_v2c(c,io_channel):
 	###########################################
@@ -475,9 +463,9 @@ def init_chips_v2c(c,io_channel):
 
 	if do_power_cycle:
 		#disable pacman rx uarts
-		print('enable pacman power')
+		#print('enable pacman power')
 		bitstring = list('00000000000000000000000000000000')
-		print(int("".join(bitstring),2))
+		#print(int("".join(bitstring),2))
 		c.io.set_reg(0x18, int("".join(bitstring),2), io_group)
 		# disable tile power, LARPIX clock
 		c.io.set_reg(0x00000010, 0, io_group)
@@ -496,7 +484,7 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x24010+(PACMAN_TILE-1), VDDA_DAC, io_group)
 		
 
-		print('reset the larpix for n cycles',RESET_CYCLES)
+		#print('reset the larpix for n cycles',RESET_CYCLES)
 		#   - set reset cycles
 		c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
 		#   - toggle reset bit
@@ -508,7 +496,7 @@ def init_chips_v2c(c,io_channel):
 		tile_enable_val=pow(2,PACMAN_TILE-1)+0x0200  #enable one tile at a time	
 		c.io.set_reg(0x00000010,tile_enable_val,io_group)
 		time.sleep(0.03)
-		print('enable tilereg 0x10 , ', tile_enable_val)
+		#print('enable tilereg 0x10 , ', tile_enable_val)
 		#readback=pacman_base.power_readback(c.io, io_group, pacman_version,pacman_tile)
 
 		#   - toggle reset bit
@@ -524,9 +512,9 @@ def init_chips_v2c(c,io_channel):
 	c.write_configuration(chip_key)
 	verified,returnregisters=c.verify_configuration(chip_key)
 	print(verified,returnregisters)
-	print('list(c.chips.values()= ',list(c.chips.values()))
-	print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
-	print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
+	#print('list(c.chips.values()= ',list(c.chips.values()))
+	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
+	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
 	chip = list(c.chips.values())[0] # selects 1st chip in chain
 
 	return chip
@@ -1346,8 +1334,8 @@ def RunTests():
 		else: 
 			print('can not get v2cState.get()')
 		print(chip)
-		print('c.chips after init board/chip')
-		print(c.chips)
+		#print('c.chips after init board/chip')
+		#print(c.chips)
 		#print(chip.config)
 		#exit() 
 		if chip == None : 
