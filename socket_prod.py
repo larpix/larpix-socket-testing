@@ -1442,6 +1442,12 @@ def RunTests():
 		chip.config.vcm_dac=45
 		#set ref vref  ( 219 def = 1.54V)
 		chip.config.vref_dac=187
+		if v2cState.get() == '1':
+			#v2c defaults for socket tester
+			#set ref vcm  (77 def = 0.54V)
+			chip.config.vcm_dac=50
+			#set ref vref  ( 219 def = 1.54V)
+			chip.config.vref_dac=192
 	elif v2bState.get() == '0':
 		# setting for v2a 
 		# 77 too high, all are at 0, 50 sent some down to zero, 
