@@ -74,53 +74,13 @@ def init_controller():
 	c.io.ping()
 	return c
 
-def init_board_unused(c,io_chan=1):
-	#c.load('../configs/controller/pcb-3_chip_info.json')
-	#c.load('../configs/controller/socket-board-v1.json')
-	if v2bState.get() == '0':
-		if io_chan==1:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_1.json')
-		elif io_chan==2:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_2.json')
-		elif io_chan==3:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_3.json')
-		elif io_chan==4:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2_socket_channel_4.json')
-		else:
-			exit('bad IO channel specified')
-	elif v2bState.get() == '1':
-		_default_chip_id=2
-		_default_miso_ds = io_chan-1
-		_default_mosi = io_chan-1
-		#print('loading v2b json file')
-		c.add_chip(larpix.Key(1, io_chan, _default_chip_id),version='2b')
-		c.add_network_node(1, io_chan, c.network_names, 'ext', root=True)
-		c.add_network_link(1, io_chan, 'miso_us', ('ext',_default_chip_id), 0)
-		c.add_network_link(1, io_chan, 'miso_ds', (_default_chip_id,'ext'), _default_miso_ds)
-		c.add_network_link(1, io_chan, 'mosi', ('ext', _default_chip_id), _default_mosi)
-		'''
-		if io_chan==1:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_1.json')
-		elif io_chan==2:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_2.json')
-		elif io_chan==3:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_3.json')
-		elif io_chan==4:
-			c.load('/home/apdlab/larpixv2/configs/controller/v2b_socket_channel_4.json')
-		else:
-			exit('bad IO channel specified')
-		'''
-	else : 
-		exit('could not determine v2bState')
-
-	c.io.ping()
-
 def init_board_base(c,_default_io_channel=1):
 	##### setup hydra network configuration
 	#if controller_config is None:
-	if PacmanVersion == 'RevS1' and v2bState.get() == '1':
+	#if PacmanVersion == 'RevS1' and v2bState.get() == '1':
+	if PacmanVersion == 'RevS1' and ASICversion.get() == 'v2b':
 		Tile_ID = 2
-	else:
+	else:  # v2a
 		Tile_ID = 1
 	##### default network (single chip) if no hydra network provided
 	_default_io_group = 1
@@ -129,21 +89,14 @@ def init_board_base(c,_default_io_channel=1):
 	_default_mosi = _default_io_channel -1 #0
 	_default_io_channel = 4*(Tile_ID-1) + _default_io_channel
 
-	if v2bState.get() == '0':
+	if ASICversion.get() == 'v2a':  
 		c.add_chip(larpix.Key(_default_io_group, _default_io_channel, _default_chip_id))
-	elif v2bState.get() == '1':
+	#elif v2bState.get() == '1':
+	elif ASICversion.get() == 'v2b':
 		c.add_chip(larpix.Key(_default_io_group, _default_io_channel, _default_chip_id),version='2b')
 	c.add_network_node(_default_io_group, _default_io_channel, c.network_names, 'ext', root=True)
 	c.add_network_link(_default_io_group, _default_io_channel, 'miso_us', ('ext',_default_chip_id), 0)
 	c.add_network_link(_default_io_group, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
-	'''
-	if v2cState.get() == '0':
-		c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
-	else:
-		for _default_miso_ds in [ 0xF ] :
-			print('configing for _default_miso_ds of ',_default_miso_ds)
-			c.add_network_link(1, _default_io_channel, 'miso_ds', (_default_chip_id,'ext'),_default_miso_ds)
-	'''
 	c.add_network_link(_default_io_group, _default_io_channel, 'mosi', ('ext', _default_chip_id), _default_mosi)
 	#else:
 	#c.load(controller_config)
@@ -507,7 +460,10 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
 		time.sleep(0.01)
 
-	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)
+	if ASICversion=='v2d':
+		chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id,version='2d')
+	else:
+		chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # defaulted to version='2c'?
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 	c.write_configuration(chip_key)
 	verified,returnregisters=c.verify_configuration(chip_key)
@@ -526,13 +482,13 @@ def init_chips(c):
 		c.io.set_reg(0x25014, 0x10) # disables analog monitor from all tiles on SMA A
 		c.io.set_reg(0x25015, 0x10) # disables SMA B
         	#PACMAN RevS1 powerup settings
-		if v2cState.get() == '1' :
+		if ASICversion.get() == 'v2c' :
 			vddd = 29250
 			vdda = 43875
-		else : 
+		else : # v2a or v2b
 			vddd = 43785
 			vdda = 43875
-		if v2bState.get() == '1':  # use tile 2 for v2b or v2c for RevS1 pacam
+		if ASICversion.get() == 'v2b':  # use tile 2 for v2b or v2c for RevS1 pacam
 			c.io.set_reg(0x00024132, vdda) # tile 2 VDDA
 			c.io.set_reg(0x00024133, vddd) # tile 2 VDDD
 			c.io.set_reg(0x00000014, 1) # enable global larpix power
@@ -550,7 +506,7 @@ def init_chips(c):
 		
 		time.sleep(1)
 		#Set correct voltages
-		if v2cState.get() == '1' :
+		if ASICversion.get() == 'v2c' :
 			c.io.set_vddd(vddd_dac=0x8E6C) # set low vddd for v2c(1.2V)
 			c.io.set_vdda() # set default vdda (~1.8V)
 		else:
@@ -584,7 +540,6 @@ def init_chips(c):
 	c.io.reset_larpix(length=10240)
 	# resets uart speeds on fpga
 	#print('c.network.items()= ',c.network.items())
-	#if v2bState.get() == '0':
 	for io_group, io_channels in c.network.items():
 		for io_channel in io_channels:
 			print('set uart speed on group ',io_group,' on channel',io_channel,'...')
@@ -600,10 +555,6 @@ def init_chips(c):
 		for io_channel in io_channels:
 			print("io_group,io_channel:",io_group,",",io_channel)
 			c.init_network(io_group, io_channel,differential='True')
-			#if v2bState.get() == '0':
-			#c.init_network(io_group, io_channel,differential='True')
-			#if v2bState.get() == '1':
-			#c.init_network(io_group, io_channel,differential=True)
 			print('Finished init_network')
 
 	if False:  # A test for success of making init_network
@@ -617,7 +568,7 @@ def init_chips(c):
 	#print(list(c.network[1][4]['mosi'].edges()))
 	#exit()
 	# Brooke Power_up_network.py
-	if v2bState.get() == '1' : 
+	if ASICversion.get() == 'v2b' : 
 		#c = larpix.Controller()
 		#print('here')
 		#c.io = larpix.io.PACMAN_IO(relaxed=True)
@@ -653,7 +604,7 @@ def init_chips(c):
 		#print('Writing configuration')
 		#while True:
 		for chip in c.chips.values():
-			if v2cState.get() == '1' :
+			if ASICversion.get() == 'v2c' :
 				print(c[chip.chip_key].config.enable_piso_downstream) 
 				c[chip.chip_key].config.enable_piso_downstream=[1]*4
 				print(c[chip.chip_key].config.enable_piso_downstream)
@@ -692,7 +643,7 @@ def init_chips(c):
 		#return c
 
 
-	if v2bState.get() == '0':
+	if ASICversion.get() == 'v2a':
 		# Configure the IO for a slower UART and differential signaling
 		c.io.double_send_packets = True # double up packets to avoid 512 bug when configuring
 		for io_group, io_channels in c.network.items():
@@ -704,8 +655,6 @@ def init_chips(c):
 					c[chip_key].config.enable_miso_differential = [1,1,1,1]
 					c.write_configuration(chip_key, 'enable_miso_differential')
 					c.write_configuration(chip_key, 'clk_ctrl')
-
-		#if v2bState.get() == '0':
 		for io_group, io_channels in c.network.items():
 			for io_channel in io_channels:
 				c.io.set_uart_clock_ratio(io_channel, 4, io_group=io_group)
@@ -729,7 +678,7 @@ def init_chips(c):
 	print('Writing configuration')
 	#while True:
 	print(c[chip.chip_key].config.enable_piso_downstream) 
-	if v2cState.get() == '1' :
+	if ASICversion.get() == 'v2c' :
 		print(c[chip.chip_key].config.enable_piso_downstream) 
 		c[chip.chip_key].config.enable_piso_downstream=[1]*4
 		print(c[chip.chip_key].config.enable_piso_downstream)
@@ -955,9 +904,9 @@ def get_baseline_periodicselftrigger(c,chip):
 	if run_Popen :
 		# Run socket_baselines in subprocess to allow killing
 		#cmd=['python socket_baselines.py']
-		if v2bState.get() == '0':
+		if ASICversion.get() == 'v2a':
 			cmd=['python socket_baselines_v2astd.py']
-		elif v2bState.get() == '1':
+		elif ASICversion.get() == 'v2b':
 			cmd=['python socket_baselines_v2bstd.py']
 		else:
 			print('*** Not running v2a or v2b specific baselines, No idea quality of results ***')
@@ -1296,7 +1245,7 @@ def RunTests():
 		window.update()
 
 
-	if v2bState.get() == '0': setv2channelmask()
+	if ASICversion.get() == 'v2a': setv2channelmask()
 	print("Running tests for Chip SN: ",mychipIDBox[0].get())
 	ChipSN=mychipIDBox[0].get()
 
@@ -1312,8 +1261,8 @@ def RunTests():
 	dset.attrs['currentTest']=currentTests
 	dset.attrs['UseTCPIPControl']=UseTCPIPControlState.get()
 	dset.attrs['LoadHTMLplot']=LoadHTMLplotsState.get()
-	dset.attrs['v2bASIC']=v2bState.get()
-	dset.attrs['v2cASIC']=v2cState.get()
+	#dset.attrs['v2bASIC']=v2bState.get()
+	#dset.attrs['v2cASIC']=v2cState.get()
 	dset.attrs['SNAutoUp']=SNAutoIncrement.get()
 	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
@@ -1324,12 +1273,12 @@ def RunTests():
 		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
 		c=init_controller() # create a new clean controller instance
 		chip = 0
-		if v2cState.get() == '0' : # run working intialization of v2b and v2a chips
+		if ASICversion.get() == 'v2a' or ASICversion.get() == 'v2b' : # run working intialization of v2b and v2a chips
 			#init_board(c) # defaults to channel 1
 			#init_board(c,io_channel)
 			init_board_base(c,io_channel)
 			chip=init_chips(c)	 
-		elif v2cState.get() == '1': # run v2c specific chip initialization. (should work for v2b also)
+		elif ASICversion.get() == 'v2c': # run v2c specific chip initialization. (should work for v2b also)
 			chip = init_chips_v2c(c,io_channel) # does work of init_board_base and init_chips
 		else: 
 			print('can not get v2cState.get()')
@@ -1436,19 +1385,25 @@ def RunTests():
 	#chip.config.periodic_reset_cycles=1000000 # 200ms
 	#chip.config.periodic_reset_cycles=10000000 # 2s
 
-	if v2bState.get() == '1':
+	if ASICversion.get() == 'v2b':
 		#v2b defaults for socket tester
 		#set ref vcm  (77 def = 0.54V)
 		chip.config.vcm_dac=45
 		#set ref vref  ( 219 def = 1.54V)
 		chip.config.vref_dac=187
-		if v2cState.get() == '1':
-			#v2c defaults for socket tester
-			#set ref vcm  (77 def = 0.54V)
-			chip.config.vcm_dac=50
-			#set ref vref  ( 219 def = 1.54V)
-			chip.config.vref_dac=192
-	elif v2bState.get() == '0':
+	elif ASICversion.get() == 'v2c':
+		#v2c defaults for socket tester
+		#set ref vcm  (77 def = 0.54V)
+		chip.config.vcm_dac=50
+		#set ref vref  ( 219 def = 1.54V)
+		chip.config.vref_dac=192
+	elif ASICversion.get() == 'v2d':
+		#v2c defaults for socket tester
+		#set ref vcm  (77 def = 0.54V)
+		chip.config.vcm_dac=50
+		#set ref vref  ( 219 def = 1.54V)
+		chip.config.vref_dac=192
+	elif ASICversion.get() == 'v2a':
 		# setting for v2a 
 		# 77 too high, all are at 0, 50 sent some down to zero, 
 		# try 40 still a few close to 0, try 35, that looks comfortable
@@ -1603,14 +1558,10 @@ def UseTCPIPControl(): # Set Button to increase last digits of SN by one at end 
 	#print("UseTCPIPControl=",UseTCPIPControlState.get())
 	return
 
-def Togglev2c(): # Set and unset v2c, force v2b if v2c is selected.
-	# Toggle
-	#print(v2bState.get(),v2cState.get())
-	if v2cState.get()== '1' :
-		if v2bState.get()== '0' :
-			v2bState.set('1')
+def NewASICVersion(event):  # ASIC selection changed
+	#print('New ASIC version=',ASICversion.get())
 	return
-
+		  
 def trygui():
 	#window = tk.Tk()
 	#global runPeriodicBaseline
@@ -1710,20 +1661,35 @@ def trygui():
 	LoadHTMLplotsBtn= ttk.Checkbutton(SNframe,text="Load HTML\nplot",
 		variable=LoadHTMLplotsState) #, command=LoadHTMLplots)
 	LoadHTMLplotsBtn.grid(column=3,row=1,padx=20)
+	
+	global ASICversion  # replace v2b and v2c settings with selector for ASICversion
+	ASICversion=tk.StringVar()
+	#ASICversion.set('v2b')
+	ASICvsnBox=ttk.Combobox(SNframe,text='ASIC version',
+							textvariable=ASICversion,
+							values=('v2a','v2b','v2c','v2d','v3'),
+							width=4,state='readonly')
+	ASICvsnBox.bind('<<ComboboxSelected>>' ,NewASICVersion)
+	ASICvsnBox.grid(sticky=tk.W,column=4,row=2)
+	ASICvsnBox.current(newindex=1)
+	ASICvsnlabel = ttk.Label(SNframe,text="ASIC Version:")
+	ASICvsnlabel.grid(sticky=tk.SE,column=3, row=2)
 
+	'''
 	global v2bState
 	v2bState=tk.StringVar()
 	v2bState.set(0)
 	v2bBtn= ttk.Checkbutton(SNframe,text="v2b ASIC",
 		variable=v2bState) #, command=v2b)
-	v2bBtn.grid(column=3,row=2,padx=20)
+	#v2bBtn.grid(column=3,row=2,padx=20)
 
 	global v2cState
 	v2cState=tk.StringVar()
 	v2cState.set(0)
 	v2cBtn= ttk.Checkbutton(SNframe,text="v2c ASIC",
 		                variable=v2cState, command=Togglev2c) #, command=v2b)
-	v2cBtn.grid(column=4,row=2,padx=20)
+	#v2cBtn.grid(column=4,row=2,padx=20)
+	'''
 
 	global SNAutoIncrement
 	SNAutoIncrement=tk.StringVar()
@@ -1752,23 +1718,24 @@ def trygui():
 	deploySN()
 
 	#Initialize the GUI state from the previous run
-	tempstatus = h5py.File("CurrentRun.tmp",mode='r')
-	dset = tempstatus['CurrentRun']
-	ChipSN = dset.attrs['ChipSN']
-	testDefaults = dset.attrs['currentTest']
-	if len(testDefaults)==0:
-		testDefaults = [1,0,0,0,0,0,0]
-	testID=0
-	for test in testList:
-		buttonVars[testID].set(testDefaults[testID])
-		testID=testID+1
-	UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
-	LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
-	v2bState.set(dset.attrs['v2bASIC'])
-	v2cState.set(dset.attrs['v2cASIC'])
-	SNAutoIncrement.set(dset.attrs['SNAutoUp'])
-	# Don't save or restore SNfromFile, since input file needs selection each time
-	tempstatus.close()
+	#tempstatus = h5py.File("CurrentRun.tmp",mode='r')
+	with h5py.File("CurrentRun.tmp",mode='r') as tempstatus:
+		dset = tempstatus['CurrentRun']
+		ChipSN = dset.attrs['ChipSN']
+		testDefaults = dset.attrs['currentTest']
+		if len(testDefaults)==0:
+			testDefaults = [1,0,0,0,0,0,0]
+		testID=0
+		for test in testList:
+			buttonVars[testID].set(testDefaults[testID])
+			testID=testID+1
+		UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
+		LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
+		#v2bState.set(dset.attrs['v2bASIC'])
+		#v2cState.set(dset.attrs['v2cASIC'])
+		SNAutoIncrement.set(dset.attrs['SNAutoUp'])
+		# Don't save or restore SNfromFile, since input file needs selection each time
+		# tempstatus.close()  No longer needed with with-as
 
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
 	# seems that deploySN has to happen after first window paint
