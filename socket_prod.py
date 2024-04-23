@@ -294,11 +294,19 @@ def conf_root(c,cm,cadd,iog,iochan):
 	I_RX=8
 	#REF_CURRENT_TRIM = 0
 	REF_CURRENT_TRIM = 15
-
-	c.add_chip(cm,version='2b')
+	if ASICversion.get() == 'v2b':
+		CurrentASIC='2b'
+	elif ASICversion.get() == 'v2c':
+		CurrentASIC='2b'  # yes, 2b, apparently 2c never implemented, and not different
+	elif ASICversion.get() == 'v2d':
+		CurrentASIC='2d'
+	else:
+		print('Unknown ASIC version: ',ASICversion.get())
+		return
+	c.add_chip(cm,version=CurrentASIC)
 	#  - - default larpix chip_id is '1'
 	default_key = larpix.key.Key(iog, iochan, 1) # '1-5-1'
-	c.add_chip(default_key,version='2b') # TODO, create v2c class
+	c.add_chip(default_key,version=CurrentASIC) # was hardcoded to '2b'
 	#  - - rename to chip_id = cm
 	c[default_key].config.chip_id = cadd
 	c.write_configuration(default_key,'chip_id')
@@ -460,10 +468,7 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
 		time.sleep(0.01)
 
-	if ASICversion=='v2d':
-		chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id,version='2d')
-	else:
-		chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # defaulted to version='2c'?
+	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 	c.write_configuration(chip_key)
 	verified,returnregisters=c.verify_configuration(chip_key)
@@ -475,14 +480,14 @@ def init_chips_v2c(c,io_channel):
 
 	return chip
 
-def init_chips(c):
+def init_chips(c):  # only called for v2b or v2a ASICs
 
 	if PacmanVersion == 'RevS1' :
 		#c.io.set_reg(0x25014, 0) # enables analog monitor from tile 1 on SMA A
 		c.io.set_reg(0x25014, 0x10) # disables analog monitor from all tiles on SMA A
 		c.io.set_reg(0x25015, 0x10) # disables SMA B
         	#PACMAN RevS1 powerup settings
-		if ASICversion.get() == 'v2c' :
+		if ASICversion.get() == 'v2c':
 			vddd = 29250
 			vdda = 43875
 		else : # v2a or v2b
@@ -909,7 +914,8 @@ def get_baseline_periodicselftrigger(c,chip):
 		elif ASICversion.get() == 'v2b':
 			cmd=['python socket_baselines_v2bstd.py']
 		else:
-			print('*** Not running v2a or v2b specific baselines, No idea quality of results ***')
+			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
+			cmd=['python socket_baselines_v2bstd.py']
 		start_time=time.time()
 		with Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
@@ -1264,6 +1270,7 @@ def RunTests():
 	#dset.attrs['v2bASIC']=v2bState.get()
 	#dset.attrs['v2cASIC']=v2cState.get()
 	dset.attrs['SNAutoUp']=SNAutoIncrement.get()
+	dset.attrs['ASICversion']=ASICversion.get()
 	# Don't save or restore SNfromFile, since input file needs selection each time
 	tempstatus.close()
 
@@ -1278,10 +1285,10 @@ def RunTests():
 			#init_board(c,io_channel)
 			init_board_base(c,io_channel)
 			chip=init_chips(c)	 
-		elif ASICversion.get() == 'v2c': # run v2c specific chip initialization. (should work for v2b also)
+		elif ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' : # run v2c specific chip initialization. (should work for v2b also, and v2d)
 			chip = init_chips_v2c(c,io_channel) # does work of init_board_base and init_chips
 		else: 
-			print('can not get v2cState.get()')
+			print('can not get ASICversion.get(), found ',ASICversion.get())
 		print(chip)
 		#print('c.chips after init board/chip')
 		#print(c.chips)
@@ -1717,25 +1724,50 @@ def trygui():
 	numChipVar.set("1")
 	deploySN()
 
-	#Initialize the GUI state from the previous run
-	#tempstatus = h5py.File("CurrentRun.tmp",mode='r')
-	with h5py.File("CurrentRun.tmp",mode='r') as tempstatus:
-		dset = tempstatus['CurrentRun']
-		ChipSN = dset.attrs['ChipSN']
-		testDefaults = dset.attrs['currentTest']
-		if len(testDefaults)==0:
+	try:
+		#Initialize the GUI state from the previous run
+		#tempstatus = h5py.File("CurrentRun.tmp",mode='r')
+		with h5py.File("CurrentRun.tmp",mode='r') as tempstatus:
+			dset = tempstatus['CurrentRun']
+			ChipSN = dset.attrs['ChipSN']
+			testDefaults = dset.attrs['currentTest']
+			if len(testDefaults)==0:
+				testDefaults = [1,0,0,0,0,0,0]
+			testID=0
+			for test in testList:
+				buttonVars[testID].set(testDefaults[testID])
+				testID=testID+1
+			UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
+			LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
+			#v2bState.set(dset.attrs['v2bASIC'])
+			#v2cState.set(dset.attrs['v2cASIC'])
+			SNAutoIncrement.set(dset.attrs['SNAutoUp'])
+			ASICvsnBox.set(dset.attrs['ASICversion'])
+			# Don't save or restore SNfromFile, since input file needs selection each time
+			# tempstatus.close()  No longer needed with with-as
+	except IOError as ioe:
+		print("Error opening CurrentRun.tmp: ",ioe)
+		'''  Set Defaults if CurrentRun.tmp doesn't exist '''
+		with h5py.File("CurrentRun.tmp",mode='w') as tempstatus:
+			dset = tempstatus.create_dataset("CurrentRun",dtype='i')
+			ChipSN='0Z0000'
+			dset.attrs['ChipSN']=ChipSN
 			testDefaults = [1,0,0,0,0,0,0]
-		testID=0
-		for test in testList:
-			buttonVars[testID].set(testDefaults[testID])
-			testID=testID+1
-		UseTCPIPControlState.set(dset.attrs['UseTCPIPControl'])
-		LoadHTMLplotsState.set(dset.attrs['LoadHTMLplot'])
-		#v2bState.set(dset.attrs['v2bASIC'])
-		#v2cState.set(dset.attrs['v2cASIC'])
-		SNAutoIncrement.set(dset.attrs['SNAutoUp'])
-		# Don't save or restore SNfromFile, since input file needs selection each time
-		# tempstatus.close()  No longer needed with with-as
+			dset.attrs['currentTest']=testDefaults
+			testID=0
+			for test in testList:
+				buttonVars[testID].set(testDefaults[testID])
+				testID=testID+1
+			dset.attrs['UseTCPIPControl']='1'
+			dset.attrs['LoadHTMLplot']='0'
+			#dset.attrs['v2bASIC']=v2bState.get()
+			#dset.attrs['v2cASIC']=v2cState.get()
+			dset.attrs['SNAutoUp']='0'
+			dset.attrs['ASICversion']='v2b'
+			# Don't save or restore SNfromFile, since input file needs selection each time
+			# tempstatus.close() Not needed with "with" construction
+	else: 
+		print("I guess that worked." )
 
 	if ChipSN:	mychipIDBox[0].insert(0,ChipSN)
 	# seems that deploySN has to happen after first window paint
