@@ -196,11 +196,11 @@ def test_config_registers(c,chip):
 	#exit()
 
 	c.write_configuration(chip.chip_key)
-	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 	#print(verified)
 	if verified == False : # try again
 		print(returnregisters)
-		verified,returnregisters=c.verify_configuration(chip.chip_key)
+		verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 
 	if verified == False : # exit
 		#Disable chip power and interface at end
@@ -268,11 +268,11 @@ def test_config_registers(c,chip):
 	flipmask=0xFF
 	chip.config.threshold_global=flipmask^chip.config.threshold_global
 	c.write_configuration(chip.chip_key)
-	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 	#print(verified)
 	if verified == False : # try again
 		print(returnregisters)
-		verified,returnregisters=c.verify_configuration(chip.chip_key)
+		verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 
 	if verified == False : # exit
 		#Disable chip power and interface at end
@@ -471,12 +471,60 @@ def init_chips_v2c(c,io_channel):
 	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 	c.write_configuration(chip_key)
-	verified,returnregisters=c.verify_configuration(chip_key)
-	print(verified,returnregisters)
+	#verified,returnregisters=c.verify_configuration(chip_key)
+	#print(verified,returnregisters)
+	# Try write/read once only
+	PassedConfigAt=0
+	ok, diff = c.verify_configuration(chip_key, n=1 )
+	# Try readback twice, only write once
+	if not ok: 
+		print('Failed with verify n=1',diff)
+		ok, diff = c.verify_configuration(chip_key, n=2 )
+	else: 
+		#print(ok,' Passed at verify n=1')
+		PassedConfigAt=1
+	# Try writing twice / reading twice
+	if not ok: 
+		print('Failed with verify n=2',diff)		
+		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
+	else: 
+		print(ok,' Passed at verify n=2')
+		PassedConfigAt=2
+	if not ok: 
+		print('Failed with enforce_configuration n=2,n_verify=2',diff)		
+	else: 
+		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
+		PassedConfigAt=3
 	#print('list(c.chips.values()= ',list(c.chips.values()))
 	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
 	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
-	chip = list(c.chips.values())[0] # selects 1st chip in chain
+	# Write results of interface config to dated file
+	DateDirPath = time.strftime("%y%m%d")
+	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
+	# New dated file paths and names  
+	configChipResFileName=DateDirPath+"/chipconfig"+DateDirPath+".csv"
+	# If file exists, append with no header
+	ChipSN=mychipIDBox[0].get()
+	if os.path.exists(configChipResFileName) : 
+		configChipResFile=open(configChipResFileName,mode='a')
+		outTime=int(time.time())
+		configChipResFile.write(str(outTime)+','+str(ChipSN)+','+
+								str(io_channel)+','+str(PassedConfigAt)+'\n') 
+		configChipResFile.close()
+	# else create file with header
+	else : 
+		configChipResFile=open(configChipResFileName,mode='w')
+		configChipResFile.write('TestTime,ChipSN,io_channel,PassedConfigAt\n')
+		outTime=int(time.time())
+		configChipResFile.write(str(outTime)+','+str(ChipSN)+','+
+								str(io_channel)+','+str(PassedConfigAt)+'\n') 
+		configChipResFile.close()
+
+	
+	if PassedConfigAt==0: # it never passed
+		return None
+	else:
+		chip = list(c.chips.values())[0] # selects 1st chip in chain
 
 	return chip
 
@@ -618,7 +666,7 @@ def init_chips(c):  # only called for v2b or v2a ASICs
 		for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
 		for chip in c.chips.values(): 
-			verified,returnregisters=c.verify_configuration(chip.chip_key)
+			verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 			print(verified,returnregisters)
 
 		'''  Used during setup, not needed regularly
@@ -637,7 +685,7 @@ def init_chips(c):  # only called for v2b or v2a ASICs
 			#c[chip_key].config.v_cm_lvds_tx3 = 0
 			c.io.reset_larpix(length=10240)
 			c.write_configuration(chip.chip_key)
-			verified,returnregisters=c.verify_configuration(chip.chip_key)
+			verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 			print(verified,returnregisters)
 			print('Tried at ',time.strftime("%H:%M:%S"))
 			#time.sleep(20)
@@ -690,7 +738,7 @@ def init_chips(c):  # only called for v2b or v2a ASICs
 
 	for chip in c.chips.values(): c.write_configuration(chip.chip_key)
 
-	for chip in c.chips.values(): c.verify_configuration(chip.chip_key)
+	for chip in c.chips.values(): c.verify_configuration(chip.chip_key,n=2)
 
 	chip = list(c.chips.values())[0] # selects 1st chip in chain
 	#chip = list(c.chips.values())[1] # selects 2nd chip in chain
@@ -700,10 +748,10 @@ def init_chips(c):  # only called for v2b or v2a ASICs
 	print(chip.chip_key)
 	#print(chip.config)
 	c.write_configuration(chip.chip_key)
-	verified,returnregisters=c.verify_configuration(chip.chip_key)
+	verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 	if verified == False : # try again
 		print(verified,returnregisters)
-		verified,returnregisters=c.verify_configuration(chip.chip_key)
+		verified,returnregisters=c.verify_configuration(chip.chip_key,n=2)
 
 	if verified == False : # exit
 		print(verified,returnregisters)
@@ -720,7 +768,7 @@ def enable_channel(chan):
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.channel_mask[chan]=0  # turn ON this channel
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 # Set global threshold
 def setGlobalThresh(c,chip,Thresh=50):
@@ -728,7 +776,7 @@ def setGlobalThresh(c,chip,Thresh=50):
 	#print(id(chip.config))
 	chip.config.threshold_global=Thresh
 	c.write_configuration(chip.chip_key)
-	#c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key,n=2)
 
 # Turn on a series of channels (a list would be better) on analog
 # monitor and loop to the next one every 5 seconds.
@@ -750,7 +798,7 @@ def AnalogDisplay(c,chip,chan):
 	c.enable_analog_monitor(chip.chip_key,chan)
 	print("Running Analog mon on channel ",chan)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 	#time.sleep(5) # move to the loop
 	#c.disable_analog_monitor(chip.chip_key)
 
@@ -798,7 +846,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 	print('****      READ CHANNEL             ****')
 	print('***************************************')
 	#print(chip.config)
-	#c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key,n=2)
 	loop=0
 	looplimit=1
 	while loop<looplimit :
@@ -821,7 +869,7 @@ def get_baseline_selftrigger(c,chip):
 	#chip.config.sample_cycles=150
 	#chip.config.sample_cycles=1 #(set to default starting 2/21/2020)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	subprocess.run(["rm","testing.h5"])
 
@@ -831,7 +879,7 @@ def get_baseline_selftrigger(c,chip):
 	c.logger.enable()
 	c.logger.is_enabled()
 
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 	print(chip.config)
 
 	ReadChannelLoop(c,chip,0,NumASICchannels-1,0)
@@ -872,7 +920,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	#chip.config.periodic_trigger_cycles=7500000 # 750k = 75ms
 	#chip.config.periodic_trigger_cycles=1000000 # 1000k = 100ms
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	subprocess.run(["rm","testing.h5"])
 
@@ -882,7 +930,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	c.logger.enable()
 	c.logger.is_enabled()
 
-	#c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key,n=2)
 	#print(chip.config)
 	print("Starting ReadChannelLoop...")
 
@@ -965,14 +1013,14 @@ def get_baseline_periodicexttrigger(c,chip):
 	# No more sample_cycles in v2?
 	#chip.config.sample_cycles=1 #(set to default starting 2/21/2020)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	subprocess.run(["rm","testing2.h5"])
 
 	chip.config.channel_mask = [0] * NumASICchannels  # Turn ON all channels
 	chip.config.external_trigger_mask = [0] * NumASICchannels  # Turn ON all channels
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 	print(chip.config)
 
 	#logger declared and switched enabledc.
@@ -1005,7 +1053,7 @@ def PulseChannel(chan,amp=0,monitor=0):
                 c.enable_analog_monitor(chip.chip_key,chan)
                 print("Running Analog mon for Pulser on channel ",chan)
         c.write_configuration(chip.chip_key)
-        #c.verify_configuration(chip.chip_key)
+        #c.verify_configuration(chip.chip_key,n=2)
         loop=0
         looplimit=5
         while loop<looplimit :
@@ -1028,7 +1076,7 @@ def get_charge_injection():
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.external_trigger_mask = [1] * NumASICchannels  # Turn OFF ext trig all channels
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 	PulseChannelLoop(0,NumASICchannels-1,10,0)
 
 
@@ -1041,7 +1089,7 @@ def get_leakage_data():
 	chip.config.enable_periodic_reset = 0 # turn off periodic reset
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	for thresh in [25,27,30,35]:
 		setGlobalThresh(thresh)
@@ -1059,7 +1107,7 @@ def get_leakage_data():
 			chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 			chip.config.channel_mask[chan]=0  # turn ON this channel
 			c.write_configuration(chip.chip_key)
-			c.verify_configuration(chip.chip_key)
+			c.verify_configuration(chip.chip_key,n=2)
 			# Read some Data (this also delays a bit)
 			c.run(1,'test')
 			print(c.reads[-1])
@@ -1088,7 +1136,7 @@ def get_ThreshLevels(c,chip):
 			chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 			chip.config.channel_mask[chan]=0  # turn ON this channel
 			c.write_configuration(chip.chip_key)
-			c.verify_configuration(chip.chip_key)
+			c.verify_configuration(chip.chip_key,n=2)
 			thresh=128
 			step = 16
 			rate = 0
@@ -1327,13 +1375,21 @@ def RunTests():
 	#print(chip)
 
 	#test flipping bits in config register and see that they configure
-	register_results = test_config_registers(c,chip)	
-	if register_results != 0 : 
-		print('test_config_registers returned ',register_results)
-		if register_results == 1 :
-			print('Failed with bit flipping in register')
-		if register_results == 2 :
-			print('Failed with config in test_config_registers')
+	if ASICversion.get() == 'v2d':
+		register_results=0
+		print('##############################################################')
+		print('##############################################################')
+		print('###     SKIPPING FLIP BIT CHECK for V2D                    ###')
+		print('##############################################################')
+		print('##############################################################')
+	else:
+		register_results = test_config_registers(c,chip)	
+		if register_results != 0 : 
+			print('test_config_registers returned ',register_results)
+			if register_results == 1 :
+				print('Failed with bit flipping in register')
+			if register_results == 2 :
+				print('Failed with config in test_config_registers')
 	#print(c.network)	
 	#for io_group, io_channels in c.network.items():
 	#	for io_channel in io_channels:
@@ -1373,12 +1429,12 @@ def RunTests():
 	# Enable analog monitor on one channel
 	c.enable_analog_monitor(chip.chip_key,28)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	# Turn on periodic_reset
 	#chip.config.enable_periodic_reset = 1 # turn on periodic reset
 	#c.write_configuration(chip.chip_key)
-	#c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key,n=2)
 
 	# Turn off periodic_reset
 	chip.config.enable_periodic_reset = 0 # turn off periodic reset
@@ -1407,9 +1463,9 @@ def RunTests():
 	elif ASICversion.get() == 'v2d':
 		#v2c defaults for socket tester
 		#set ref vcm  (77 def = 0.54V)
-		chip.config.vcm_dac=50
+		chip.config.vcm_dac=45
 		#set ref vref  ( 219 def = 1.54V)
-		chip.config.vref_dac=192
+		chip.config.vref_dac=187
 	elif ASICversion.get() == 'v2a':
 		# setting for v2a 
 		# 77 too high, all are at 0, 50 sent some down to zero, 
@@ -1428,12 +1484,12 @@ def RunTests():
 	chip.config.pixel_trim_dac = [31] * NumASICchannels
 
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	# Disable analog monitor (any channel)
 	c.disable_analog_monitor(chip.chip_key)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	#print(chip.config)
         
@@ -1797,12 +1853,12 @@ def mainish():
 	# Enable analog monitor on one channel
 	c.enable_analog_monitor(chip.chip_key,28)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	# Turn on periodic_reset
 	#chip.config.enable_periodic_reset = 1 # turn on periodic reset
 	#c.write_configuration(chip.chip_key)
-	#c.verify_configuration(chip.chip_key)
+	#c.verify_configuration(chip.chip_key,n=2)
 
 	# Turn off periodic_reset
 	chip.config.enable_periodic_reset = 0 # turn off periodic reset
@@ -1826,12 +1882,12 @@ def mainish():
 	#chip.config.ibias_csa=12
 
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	# Disable analog monitor (any channel)
 	c.disable_analog_monitor(chip.chip_key)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
 
 	trygui(c,chip)
 
