@@ -279,7 +279,7 @@ for chan in range(NumASICchannels):
 			MaxMean = 25.0 
 			MinMean = 5.0 
 			MaxStd = 4.0 
-			MinStd = 0.8
+			MinStd = 0.3
 		# Not sure this part is right, try the version from v2astd.py 
 		#badChan =summaryFrame[ (summaryFrame['Chan']==chan) & ( summaryFrame['Nent'] == 0 | ( (summaryFrame['Std']>MaxStd) | (summaryFrame['Std']<MinStd) )
 		#		| ( (summaryFrame['Mean']<MinMean) | (summaryFrame['Mean']>MaxMean) ) ) ]
@@ -295,9 +295,10 @@ for chan in range(NumASICchannels):
 		#badChan =thisChanSummaryFrame[ ( thisChanSummaryFrame['Nent'] == 0 |
 		#	 ( (thisChanSummaryFrame['Std']>MaxStd) | (thisChanSummaryFrame['Std']<MinStd) )
 		#	| ( (thisChanSummaryFrame['Mean']<MinMean) | (thisChanSummaryFrame['Mean'].values[0]>MaxMean) ) ) ]
+		#typo below.  Should be thisChanStd< MinStd
 		if (thisChanNent == 0 or
 			thisChanMean > MaxMean or thisChanMean < MinMean or
-			thisChanStd>MaxStd or thisChanMean< MinStd ) :
+			thisChanStd>MaxStd or thisChanStd< MinStd ) :
 			badChan=thisChanSummaryFrame
 		if badChan.empty==False: 
 			print(badChan)
