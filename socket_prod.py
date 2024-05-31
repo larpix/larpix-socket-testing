@@ -477,20 +477,20 @@ def init_chips_v2c(c,io_channel):
 	PassedConfigAt=0
 	ok, diff = c.verify_configuration(chip_key, n=1 )
 	# Try readback twice, only write once
-	if not ok: 
+	if not ok and PassedConfigAt==0 : 
 		print('Failed with verify n=1',diff)
 		ok, diff = c.verify_configuration(chip_key, n=2 )
 	else: 
 		#print(ok,' Passed at verify n=1')
 		PassedConfigAt=1
 	# Try writing twice / reading twice
-	if not ok: 
+	if not ok and PassedConfigAt==0 : 
 		print('Failed with verify n=2',diff)		
 		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
 	else: 
 		print(ok,' Passed at verify n=2')
 		PassedConfigAt=2
-	if not ok: 
+	if not ok and PassedConfigAt==0 : 
 		print('Failed with enforce_configuration n=2,n_verify=2',diff)		
 	else: 
 		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
@@ -1541,7 +1541,7 @@ def SNDown(): #reduce SN last digits of SN by one
 		NumSN = int(ChipSN[2:])
 		#print(ChipSN,NumSN)
 		NumSN = NumSN -1
-		ChipSN = ChipSN[:2]+format(NumSN,"04d")
+		ChipSN = ChipSN[:2]+format(NumSN,"05d")
 		mychipIDBox[0].delete(0,'end')
 		mychipIDBox[0].insert(0,ChipSN)
 	else:
@@ -1562,7 +1562,7 @@ def SNUp(): # increase last digits of SN by one
 		NumSN = int(ChipSN[2:])
 		#print(ChipSN,NumSN)
 		NumSN = NumSN +1
-		ChipSN = ChipSN[:2]+format(NumSN,"04d")
+		ChipSN = ChipSN[:2]+format(NumSN,"05d")
 		mychipIDBox[0].delete(0,'end')
 		mychipIDBox[0].insert(0,ChipSN)
 	else:
