@@ -499,8 +499,6 @@ def init_chips_v2c(c,io_channel):
 	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
 	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
 	# Write results of interface config to dated file
-	DateDirPath = time.strftime("%y%m%d")
-	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 	# New dated file paths and names  
 	configChipResFileName=DateDirPath+"/chipconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
@@ -960,10 +958,10 @@ def get_baseline_periodicselftrigger(c,chip):
 		if ASICversion.get() == 'v2a':
 			cmd=['python socket_baselines_v2astd.py']
 		elif ASICversion.get() == 'v2b':
-			cmd=['python socket_baselines_v2bstd.py']
+			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
 		else:
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
-			cmd=['python socket_baselines_v2bstd.py']
+			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
 		start_time=time.time()
 		with Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
@@ -1347,10 +1345,17 @@ def RunTests():
 			init_chip_results=init_chip_results+pow(2,(io_channel-1))
 
 	# Write results of interface config to dated file
-	DateDirPath = time.strftime("%y%m%d")
-	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
-	# New dated file paths and names  
-	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
+    global DateDirPath
+    DateDirPath = time.strftime("%y%m%d")
+    BatchNum=0
+    BatchPath=DateDirPath+"-"+str(BatchNum)
+    while os.path.exists(BatchPath) : # Batch exists
+        BatchNum = BatchNum+1 # increment until it doesn't
+        BatchPath=DateDirPath+"-"+str(BatchNum)
+    DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
+    if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
+    # New dated file paths and names  
+    configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	if os.path.exists(configResFileName) : 
 		configResFile=open(configResFileName,mode='a')

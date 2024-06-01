@@ -12,6 +12,7 @@ import csv
 import numpy as np
 from collections import Counter
 import time
+import sys
 
 mypid=os.getpid()
 os.environ['PRINT_TIME_PID']=str(mypid)
@@ -19,7 +20,15 @@ os.environ['PRINT_TIME_PID']=str(mypid)
 print(mypid)
 print('mypid in socket_baselines is ',mypid)
 
-DateDirPath = time.strftime("%y%m%d")
+print(f"Arguments count: {len(sys.argv)}")
+for i, arg in enumerate(sys.argv):
+    print(f"Argument {i:>6}: {arg}")
+
+if len(sys.argv) >= 1 : #We got some arguments passed to our python code, it should be the output dir
+    DateDirPath = sys.argv[1]
+    print("Using output dir ",DateDirPath)
+else:
+    DateDirPath = time.strftime("%y%m%d")
 if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 
 NumASICchannels = 64
