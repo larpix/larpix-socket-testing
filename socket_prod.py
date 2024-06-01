@@ -1345,17 +1345,17 @@ def RunTests():
 			init_chip_results=init_chip_results+pow(2,(io_channel-1))
 
 	# Write results of interface config to dated file
-    global DateDirPath
-    DateDirPath = time.strftime("%y%m%d")
-    BatchNum=0
-    BatchPath=DateDirPath+"-"+str(BatchNum)
-    while os.path.exists(BatchPath) : # Batch exists
-        BatchNum = BatchNum+1 # increment until it doesn't
-        BatchPath=DateDirPath+"-"+str(BatchNum)
-    DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
-    if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
+	global DateDirPath
+	DateDirPath = time.strftime("%y%m%d")
+	BatchNum=0
+	BatchPath=DateDirPath+"-"+str(BatchNum)
+	while os.path.exists(BatchPath) : # Batch exists
+		BatchNum = BatchNum+1 # increment until it doesn't
+		BatchPath=DateDirPath+"-"+str(BatchNum)
+	DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
+	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
     # New dated file paths and names  
-    configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
+	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	if os.path.exists(configResFileName) : 
 		configResFile=open(configResFileName,mode='a')
