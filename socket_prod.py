@@ -961,11 +961,12 @@ def get_baseline_periodicselftrigger(c,chip):
 			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
 		else:
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
-			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
+			cmd=['python','socket_baselines_v2bstd.py',DateDirPath]
 		start_time=time.time()
-		with Popen(cmd, shell=True, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
+		# omit 'shell=True' when using a list for Popen, otherwise shell gets the extra args, Argh
+		with Popen(cmd, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
-			print('hopefully running socket_baselines.py')
+			print('hopefully running socket_baselines.py as ',cmd)
 			for line in p.stdout:
 				if FirstLine :
 					mypid=line # first line should just be the PID from the subprocess
@@ -1345,15 +1346,6 @@ def RunTests():
 			init_chip_results=init_chip_results+pow(2,(io_channel-1))
 
 	# Write results of interface config to dated file
-	global DateDirPath
-	DateDirPath = time.strftime("%y%m%d")
-	BatchNum=0
-	BatchPath=DateDirPath+"-"+str(BatchNum)
-	while os.path.exists(BatchPath) : # Batch exists
-		BatchNum = BatchNum+1 # increment until it doesn't
-		BatchPath=DateDirPath+"-"+str(BatchNum)
-	DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
-	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
     # New dated file paths and names  
 	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
@@ -1837,6 +1829,18 @@ def trygui():
 	
 
 def mainish():
+	
+	#Determine Date/Batch directory to use for this set of tests
+	global DateDirPath
+	DateDirPath = time.strftime("%y%m%d")
+	BatchNum=0
+	BatchPath=DateDirPath+"-"+str(BatchNum)
+	while os.path.exists(BatchPath) : # Batch exists
+		BatchNum = BatchNum+1 # increment until it doesn't
+		BatchPath=DateDirPath+"-"+str(BatchNum)
+	DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
+	print('Using path/filename ',DateDirPath)
+	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 
 	trygui() 
 	

@@ -21,10 +21,10 @@ print(mypid)
 print('mypid in socket_baselines is ',mypid)
 
 print(f"Arguments count: {len(sys.argv)}")
-for i, arg in enumerate(sys.argv):
-    print(f"Argument {i:>6}: {arg}")
-
-if len(sys.argv) >= 1 : #We got some arguments passed to our python code, it should be the output dir
+#for i, arg in enumerate(sys.argv):
+#    print(f"Argument {i:>6}: {arg}")
+print(sys.argv)
+if len(sys.argv) >= 2 : #We got some arguments passed to our python code, it should be the output dir
     DateDirPath = sys.argv[1]
     print("Using output dir ",DateDirPath)
 else:
