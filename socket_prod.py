@@ -1242,7 +1242,6 @@ def RunControl():
 				print('Sending Ready to Chip Handler')
 				conn.sendall(bytes(Ready,"utf-8"))
 			# Load a chip
-			FirstTry = True
 			# Wait for Start
 			message = tsp.CheckSocketForData(conn)
 			if message == bytes(Start,"utf-8") :
@@ -1251,13 +1250,38 @@ def RunControl():
 				print('Starting tests')
 				# Run Tests
 				ResultNum=RunTests()
+				# ResultNum <0 is a comm/config failure with 4 bit bitmask of comm channel fail
+				# if <100, the 100ths digit is a fail mode for a bit flip in config.
+				# if resultnum > 0 there were bad channels (noise or empty)
 				# Does this section need a full Hello/Ready? probably
-				if FirstTry and not ResultNum==0 : 
+				#if FirstTry and not ResultNum==0 : 
+					#send 8 to retry socket insertion and rerun tests
+					# requires double plunge enable for this result in chip handler
+					#print('Result was ',ResultNum,' sending ',Result8,' to retry')
+					#conn.sendall(bytes(Result8,"utf-8"))
+					#FirstTry = False
+					#message = tsp.CheckSocketForData(conn)
+					#if message == bytes(Start,"utf-8") :
+						#print('Received Start from Chip Handler')
+						#Send Ready (or EOL) back
+						#print('Starting tests')
+						# Run Tests
+						#ResultNum=RunTests()
+				CommFails=0
+				BPSFails=0
+				CommFailsMax=2
+				BPSFailsMax=2
+				if ResultNum < 0 :
+					CommFails=CommFails+1
+				elif ResultNum > 0 :
+					BPSFails=BPSFails+1
+				else:
+					print('ResultNum unexpectedly = ',ResultNum)
+				while ResultNum != 0 and CommFails<CommFailsMax and BPSFails<BPSFailsMax :
 					#send 8 to retry socket insertion and rerun tests
 					# requires double plunge enable for this result in chip handler
 					print('Result was ',ResultNum,' sending ',Result8,' to retry')
 					conn.sendall(bytes(Result8,"utf-8"))
-					FirstTry = False
 					message = tsp.CheckSocketForData(conn)
 					if message == bytes(Start,"utf-8") :
 						print('Received Start from Chip Handler')
@@ -1265,6 +1289,13 @@ def RunControl():
 						print('Starting tests')
 						# Run Tests
 						ResultNum=RunTests()
+					if ResultNum < 0 :
+						CommFails=CommFails+1
+					elif ResultNum > 0 :
+						BPSFails=BPSFails+1
+					else:
+						print('ResultNum unexpectedly = ',ResultNum)
+					
 				#time.sleep(5)
 				#ResultNum=0 # Fake result for testing
 				# Send results to Chip Handler
