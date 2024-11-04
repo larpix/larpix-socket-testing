@@ -477,24 +477,24 @@ def init_chips_v2c(c,io_channel):
 	PassedConfigAt=0
 	ok, diff = c.verify_configuration(chip_key, n=1 )
 	# Try readback twice, only write once
-	if not ok and PassedConfigAt==0 : 
+	if ok : 
+		print(ok,' Passed at verify n=1')
+		PassedConfigAt=1
+	else:  
 		print('Failed with verify n=1',diff)
 		ok, diff = c.verify_configuration(chip_key, n=2 )
-	else: 
-		#print(ok,' Passed at verify n=1')
-		PassedConfigAt=1
 	# Try writing twice / reading twice
-	if not ok and PassedConfigAt==0 : 
-		print('Failed with verify n=2',diff)		
-		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
-	else: 
+	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at verify n=2')
 		PassedConfigAt=2
-	if not ok and PassedConfigAt==0 : 
-		print('Failed with enforce_configuration n=2,n_verify=2',diff)		
-	else: 
+	elif PassedConfigAt==0:
+		print('Failed with verify n=2',diff)		
+		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
+	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
 		PassedConfigAt=3
+	elif PassedConfigAt==0:
+		print('Failed with enforce_configuration n=2,n_verify=2',diff)		 
 	#print('list(c.chips.values()= ',list(c.chips.values()))
 	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
 	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
@@ -1242,7 +1242,6 @@ def RunControl():
 				print('Sending Ready to Chip Handler')
 				conn.sendall(bytes(Ready,"utf-8"))
 			# Load a chip
-			FirstTry = True
 			# Wait for Start
 			message = tsp.CheckSocketForData(conn)
 			if message == bytes(Start,"utf-8") :
@@ -1251,13 +1250,43 @@ def RunControl():
 				print('Starting tests')
 				# Run Tests
 				ResultNum=RunTests()
+				# ResultNum <0 is a comm/config failure with 4 bit bitmask of comm channel fail
+				# if <100, the 100ths digit is a fail mode for a bit flip in config.
+				# if resultnum > 0 there were bad channels (noise or empty)
 				# Does this section need a full Hello/Ready? probably
-				if FirstTry and not ResultNum==0 : 
+				#if FirstTry and not ResultNum==0 : 
+					#send 8 to retry socket insertion and rerun tests
+					# requires double plunge enable for this result in chip handler
+					#print('Result was ',ResultNum,' sending ',Result8,' to retry')
+					#conn.sendall(bytes(Result8,"utf-8"))
+					#FirstTry = False
+					#message = tsp.CheckSocketForData(conn)
+					#if message == bytes(Start,"utf-8") :
+						#print('Received Start from Chip Handler')
+						#Send Ready (or EOL) back
+						#print('Starting tests')
+						# Run Tests
+						#ResultNum=RunTests()
+				CommFails=0
+				BPSFails=0
+				CommFailsMax=1
+				BPSFailsMax=1
+				'''
+				Had to set MODEFailsMax to 1 above.  Looks like you can only double plunge once 
+				on a given result for the tester.  Could try adding progression of result codes
+				for a retest and enable double plunge, like 8,7,6, for each retest...
+				'''
+				while ResultNum != 0 and CommFails<CommFailsMax and BPSFails<BPSFailsMax :
+					if ResultNum < 0 :
+						CommFails=CommFails+1
+					elif ResultNum > 0 :
+						BPSFails=BPSFails+1
+					else:
+						print('ResultNum unexpectedly = ',ResultNum)
 					#send 8 to retry socket insertion and rerun tests
 					# requires double plunge enable for this result in chip handler
 					print('Result was ',ResultNum,' sending ',Result8,' to retry')
 					conn.sendall(bytes(Result8,"utf-8"))
-					FirstTry = False
 					message = tsp.CheckSocketForData(conn)
 					if message == bytes(Start,"utf-8") :
 						print('Received Start from Chip Handler')
@@ -1265,6 +1294,7 @@ def RunControl():
 						print('Starting tests')
 						# Run Tests
 						ResultNum=RunTests()
+					
 				#time.sleep(5)
 				#ResultNum=0 # Fake result for testing
 				# Send results to Chip Handler
