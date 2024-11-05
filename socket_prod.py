@@ -74,7 +74,7 @@ def init_controller():
 	c.io.ping()
 	return c
 
-def init_board_base(c,_default_io_channel=1):
+def init_board_base(c,_default_io_channel=1): # only called for v2a or v2b
 	##### setup hydra network configuration
 	#if controller_config is None:
 	#if PacmanVersion == 'RevS1' and v2bState.get() == '1':
@@ -300,6 +300,8 @@ def conf_root(c,cm,cadd,iog,iochan):
 		CurrentASIC='2b'  # yes, 2b, apparently 2c never implemented, and not different
 	elif ASICversion.get() == 'v2d':
 		CurrentASIC='2d'
+	elif ASICversion.get() == 'v3':
+		CurrentASIC=3
 	else:
 		print('Unknown ASIC version: ',ASICversion.get())
 		return
@@ -940,6 +942,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	#doneSong.play()
 	window.update()	
 
+	print("disabling the logger")
 	c.logger.disable()
 	#c.logger.flush()
 	#c.logger.close()
@@ -1363,7 +1366,7 @@ def RunTests():
 			#init_board(c,io_channel)
 			init_board_base(c,io_channel)
 			chip=init_chips(c)	 
-		elif ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' : # run v2c specific chip initialization. (should work for v2b also, and v2d)
+		elif ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' or ASICversion.get() == 'v3' : # run v2c specific chip initialization. (should work for v2b also, and v2d)
 			chip = init_chips_v2c(c,io_channel) # does work of init_board_base and init_chips
 		else: 
 			print('can not get ASICversion.get(), found ',ASICversion.get())
@@ -1490,6 +1493,12 @@ def RunTests():
 		chip.config.vref_dac=192
 	elif ASICversion.get() == 'v2d':
 		#v2c defaults for socket tester
+		#set ref vcm  (77 def = 0.54V)
+		chip.config.vcm_dac=45
+		#set ref vref  ( 219 def = 1.54V)
+		chip.config.vref_dac=187
+	elif ASICversion.get() == 'v3':
+		#v3 defaults for socket tester, starting with v2d
 		#set ref vcm  (77 def = 0.54V)
 		chip.config.vcm_dac=45
 		#set ref vref  ( 219 def = 1.54V)
