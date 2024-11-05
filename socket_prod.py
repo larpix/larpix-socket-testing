@@ -32,9 +32,9 @@ SNList = []
 
 #DumbFunc('another one')
 
-sadSong = sa.WaveObject.from_wave_file('sounds/Sad_Trombone-Joe_Lamb-665429450.wav')
-successSong = sa.WaveObject.from_wave_file('sounds/TaDaSoundBible.com-1884170640.wav')
-doneSong = sa.WaveObject.from_wave_file('sounds/service-bell_daniel_simion.wav')
+#sadSong = sa.WaveObject.from_wave_file('sounds/Sad_Trombone-Joe_Lamb-665429450.wav')
+#successSong = sa.WaveObject.from_wave_file('sounds/TaDaSoundBible.com-1884170640.wav')
+#doneSong = sa.WaveObject.from_wave_file('sounds/service-bell_daniel_simion.wav')
 
 NumASICchannels = 64
 
@@ -937,7 +937,7 @@ def get_baseline_periodicselftrigger(c,chip):
 
 	print("the end")
 	textBox.config(bg="yellow")
-	doneSong.play()
+	#doneSong.play()
 	window.update()	
 
 	c.logger.disable()
@@ -991,11 +991,11 @@ def get_baseline_periodicselftrigger(c,chip):
 
 	if int(nBadBaselineChannels) == 0 :
 		textBox.config(bg="green")
-		successSong.play()
+		#successSong.play()
 		window.update()	
 	else : 
 		textBox.config(bg="red") # flashing? 
-		sadSong.play()
+		#sadSong.play()
 		window.update()	
 
 	return nBadBaselineChannels
@@ -1204,7 +1204,8 @@ def get_ThreshLevels(c,chip):
 	RateThreshFrame.to_hdf("RateThresh.h5",mode='a',key='RateVsThreshV1')
 
 def RunControl():
-	HOST = '192.168.12.139'  # apdlab pc interface address 
+	#HOST = '192.168.12.139'  # apdlab pc interface address 
+	HOST = '172.21.129.40'  # ip address of chip handler in wsl2 
 	PORT = 38630        # Port to listen on (non-privileged ports are > 1023)
 
 	Hello='H\r'
