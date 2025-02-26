@@ -62,13 +62,20 @@ TileChannelMask
 
 def init_controller():
 	c = Controller()
+	# looks like io only supports version 3 in the feature/v3 branch of larpix-control
 	if PacmanVersion == 'RevS1' :
 	#c.io = ZMQ_IO('../configs/io/daq-srv1.json', miso_map={2:1})
 		print('Intializing pacman20 RevS1')
-		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json')
+		if ASICversion.get() == 'v3':
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json',asic_version=3)
+		else:
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman20.json',asic_version=2)
 	elif PacmanVersion == 'pacman4': 
 		print('Intializing pacman4 ')
-		c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json')
+		if ASICversion.get() == 'v3':
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json',asic_version=3)
+		else:
+			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json',asic_version=2)
 	else:
 		exit('PacmanVersion not specified, exiting...')
 	c.io.ping()
@@ -404,12 +411,23 @@ def conf_root(c,cm,cadd,iog,iochan):
 def init_chips_v2c(c,io_channel):
 	###########################################
 	IO_GROUP = 1
-	PACMAN_TILE = 2  # Assuming Pacman RevS1 (uses tile 2 for v2b,v2c and tile 1 for v2a)
+	PACMAN_TILE = 2  # Assuming Pacman RevS1 (uses tile 2 for v2b,v2c,v2d,v3 and tile 1 for v2a)
 	IO_CHAN = (io_channel+(PACMAN_TILE-1)*4)
+	'''
+	2.05	50303.74
+	2.25	54976.64
+	2.3	56144.86
+	2.4	58481.31
+	2.5	60817.76
+	'''
 	#VDDA_DAC= 44500 # ~1.8 V
 	#VDDD_DAC = 28500 # ~1.1 V
-	VDDA_DAC = 44500
-	VDDD_DAC = 30000
+	#VDDA_DAC = 55000 # 2.2V
+	VDDA_DAC = 56000  # 2.23v
+	VDDA_DAC = 56500 # 2.25V
+	#VDDD_DAC = 44500
+	VDDD_DAC = 30000   #~1.2V
+	#VDDD_DAC = 44500 #~1.8V
 	RESET_CYCLES = 300000 #5000000
 
 	REF_CURRENT_TRIM=0
@@ -438,14 +456,16 @@ def init_chips_v2c(c,io_channel):
 		# enable pacman power
 		c.io.set_reg(0x00000014, 1, io_group)
 		#set voltage dacs to 0V  
-		c.io.set_reg(0x24010+(PACMAN_TILE-1), 0, io_group)
-		c.io.set_reg(0x24020+(PACMAN_TILE-1), 0, io_group)
+		c.io.set_reg(0x24132+(PACMAN_TILE-1), 0, io_group)
+		c.io.set_reg(0x24131+(PACMAN_TILE-1), 0, io_group)
 		#time.sleep(0.1)
 		time.sleep(1)
 		#set voltage dacs  VDDD first 
-		c.io.set_reg(0x24020+(PACMAN_TILE-1), VDDD_DAC, io_group)
-		c.io.set_reg(0x24010+(PACMAN_TILE-1), VDDA_DAC, io_group)
+		c.io.set_reg(0x24132+(PACMAN_TILE-1), VDDD_DAC, io_group)
+		c.io.set_reg(0x24131+(PACMAN_TILE-1), VDDA_DAC, io_group)
 		
+		c.io.reset_larpix(length=1024)
+		c.io.reset_larpix(length=1024)
 
 		#print('reset the larpix for n cycles',RESET_CYCLES)
 		#   - set reset cycles
@@ -962,6 +982,8 @@ def get_baseline_periodicselftrigger(c,chip):
 			cmd=['python socket_baselines_v2astd.py']
 		elif ASICversion.get() == 'v2b':
 			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
+		elif ASICversion.get() == 'v3':
+			cmd=['python3','socket_baselines_v3std.py',DateDirPath]
 		else:
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
 			cmd=['python','socket_baselines_v2bstd.py',DateDirPath]
@@ -1406,11 +1428,11 @@ def RunTests():
 	#print(chip)
 
 	#test flipping bits in config register and see that they configure
-	if ASICversion.get() == 'v2d':
+	if ASICversion.get() == 'v2d' or ASICversion.get() == 'v3':
 		register_results=0
 		print('##############################################################')
 		print('##############################################################')
-		print('###     SKIPPING FLIP BIT CHECK for V2D                    ###')
+		print('###     SKIPPING FLIP BIT CHECK for V2D or v3              ###')
 		print('##############################################################')
 		print('##############################################################')
 	else:
@@ -1458,9 +1480,10 @@ def RunTests():
 	setGlobalThresh(c,chip,255)
 
 	# Enable analog monitor on one channel
-	c.enable_analog_monitor(chip.chip_key,28)
-	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key,n=2)
+	if ASICversion.get() != 'v3':
+		c.enable_analog_monitor(chip.chip_key,28)
+		c.write_configuration(chip.chip_key)
+		c.verify_configuration(chip.chip_key,n=2)
 
 	# Turn on periodic_reset
 	#chip.config.enable_periodic_reset = 1 # turn on periodic reset
@@ -1478,6 +1501,8 @@ def RunTests():
 	chip.config.periodic_reset_cycles=100000 # 20ms
 	#chip.config.periodic_reset_cycles=1000000 # 200ms
 	#chip.config.periodic_reset_cycles=10000000 # 2s
+
+	#print(chip.config)
 
 	if ASICversion.get() == 'v2b':
 		#v2b defaults for socket tester
@@ -1500,9 +1525,10 @@ def RunTests():
 	elif ASICversion.get() == 'v3':
 		#v3 defaults for socket tester, starting with v2d
 		#set ref vcm  (77 def = 0.54V)
-		chip.config.vcm_dac=45
+		#chip.config.vcm_dac=45  # there is no vcm_dac on v3
 		#set ref vref  ( 219 def = 1.54V)
-		chip.config.vref_dac=187
+		chip.config.vref_dac=255
+		chip.config.adc_ibias_delay=7
 	elif ASICversion.get() == 'v2a':
 		# setting for v2a 
 		# 77 too high, all are at 0, 50 sent some down to zero, 
@@ -1524,9 +1550,10 @@ def RunTests():
 	c.verify_configuration(chip.chip_key,n=2)
 
 	# Disable analog monitor (any channel)
-	c.disable_analog_monitor(chip.chip_key)
-	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key,n=2)
+	if ASICversion.get() != 'v3':
+		c.disable_analog_monitor(chip.chip_key)
+		c.write_configuration(chip.chip_key)
+		c.verify_configuration(chip.chip_key,n=2)
 
 	#print(chip.config)
         
