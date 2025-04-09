@@ -420,11 +420,13 @@ def init_chips_v2c(c,io_channel):
 	2.4	58481.31
 	2.5	60817.76
 	'''
-	#VDDA_DAC= 44500 # ~1.8 V
+	VDDA_DAC= 44500 # ~1.8 V
 	#VDDD_DAC = 28500 # ~1.1 V
 	#VDDA_DAC = 55000 # 2.2V
-	VDDA_DAC = 56000  # 2.23v
-	VDDA_DAC = 56500 # 2.25V
+	#VDDA_DAC = 56000  # 2.23v
+	#VDDA_DAC = 56500 # 2.25V
+	#VDDA_DAC = 63000 # 2.5V
+	#VDDA_DAC = 65535 # 2.59V
 	#VDDD_DAC = 44500
 	VDDD_DAC = 30000   #~1.2V
 	#VDDD_DAC = 44500 #~1.8V
@@ -451,8 +453,9 @@ def init_chips_v2c(c,io_channel):
 		# disable tile power, LARPIX clock
 		c.io.set_reg(0x00000010, 0, io_group)
 		# set up mclk in pacman
-		c.io.set_reg(0x101c, 0x4, io_group)
-		
+		#c.io.set_reg(0x101c, 0x4, io_group)
+		c.io.set_uart_clock_ratio(IO_CHAN,   1)
+
 		# enable pacman power
 		c.io.set_reg(0x00000014, 1, io_group)
 		#set voltage dacs to 0V  
@@ -492,7 +495,8 @@ def init_chips_v2c(c,io_channel):
 
 	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
-	c.write_configuration(chip_key)
+	#c.write_configuration(chip_key)
+	ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
 	#verified,returnregisters=c.verify_configuration(chip_key)
 	#print(verified,returnregisters)
 	# Try write/read once only
@@ -503,20 +507,23 @@ def init_chips_v2c(c,io_channel):
 		print(ok,' Passed at verify n=1')
 		PassedConfigAt=1
 	else:  
-		print('Failed with verify n=1',diff)
+		#print('Failed with verify n=1',diff)
+		print('Failed with verify n=1')
 		ok, diff = c.verify_configuration(chip_key, n=2 )
 	# Try writing twice / reading twice
 	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at verify n=2')
 		PassedConfigAt=2
 	elif PassedConfigAt==0:
-		print('Failed with verify n=2',diff)		
+		#print('Failed with verify n=2',diff)		
+		print('Failed with verify n=2')		
 		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
 	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
 		PassedConfigAt=3
 	elif PassedConfigAt==0:
-		print('Failed with enforce_configuration n=2,n_verify=2',diff)		 
+		#print('Failed with enforce_configuration n=2,n_verify=2',diff)		 
+		print('Failed with enforce_configuration n=2,n_verify=2')		 
 	#print('list(c.chips.values()= ',list(c.chips.values()))
 	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
 	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
@@ -862,7 +869,8 @@ def ReadChannel(c,chip,chan,monitor=0):
 		c.enable_analog_monitor(chip.chip_key,chan)
 		print("Running Analog mon for Pulser on channel ",chan)
 	c.write_configuration(chip.chip_key)
-	c.verify_configuration(chip.chip_key,n=2) # this should store config before each data segment.
+	if  chan == 0 :
+		c.verify_configuration(chip.chip_key,n=2) # this should store config before first data segment.
 	print('***************************************')
 	print('****      READ CHANNEL             ****')
 	print('***************************************')
@@ -989,6 +997,16 @@ def get_baseline_periodicselftrigger(c,chip):
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
 			cmd=['python','socket_baselines_v2bstd.py',DateDirPath]
 		start_time=time.time()
+		# open for append a file to use for log file
+		saveProcessLog=True
+		if (saveProcessLog):
+			#open file for output
+			ChipSN=mychipIDBox[0].get()
+			if not os.path.exists(DateDirPath+"/baselines"): os.makedirs(DateDirPath+"/baselines")
+			for testcycle in range(10):
+				ProcessLogFileName=DateDirPath+"/baselines/baseline-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
+				if not os.path.isfile(ProcessLogFileName): break
+			ProcessLogFile=open(ProcessLogFileName,'w')
 		# omit 'shell=True' when using a list for Popen, otherwise shell gets the extra args, Argh
 		with Popen(cmd, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
@@ -998,12 +1016,18 @@ def get_baseline_periodicselftrigger(c,chip):
 					mypid=line # first line should just be the PID from the subprocess
 					FirstLine=False
 				print(line, end='') # process line here
+				if (saveProcessLog):
+					# print stdout from subrpocess to log file
+					ProcessLogFile.write(line)
 				dt=time.time()-start_time
 				#print('dt=',dt)
 				if dt > 30 : 
 					# PID of process sent as first output (set in socket_baselines.py)
 					print('mypid socket_baselines is ',mypid)
 					os.kill(int(mypid),signal.SIGKILL)
+		if (saveProcessLog):
+			#close file for output
+			ProcessLogFile.close()
 
 		nBadBaselineChannels=p.returncode
 		#if p.returncode != 0:

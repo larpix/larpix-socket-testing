@@ -50,13 +50,15 @@ def getData(filename):
 
 def getMeanAndStd(adc_list, chan):
     global mean, sdev
-    m = round(np.mean(adc_list),2)
-    sd = round(np.std(adc_list),2)
+    nentries[chan] = len(adc_list)
     zerocnt=len(adc_list)-np.count_nonzero(adc_list)
-    print("Chan {} Mean {} and Std {} and max {} and min {} and zerocnt {} for {} entries".format(chan,m,sd,np.max(adc_list),np.min(adc_list),zerocnt,len(adc_list)))
+    adc_list_nz=adc_list[adc_list!=0]
+    m = round(np.mean(adc_list_nz),2)
+    sd = round(np.std(adc_list_nz),2)
+    print("Chan {} Mean {} and Std {} and max {} and min {} and zerocnt {} for {} entries and {} nz_entries"
+		  .format(chan,m,sd,np.max(adc_list_nz),np.min(adc_list_nz),zerocnt,len(adc_list),len(adc_list_nz)))
     mean[chan] = m
     sdev[chan] = sd
-    nentries[chan] = len(adc_list)
 
 def BaselineLoop(data,firstChan=0,lastChan=NumASICchannels-1):
     #print(data)
@@ -77,7 +79,7 @@ def BaselineLoop(data,firstChan=0,lastChan=NumASICchannels-1):
         print("Bit problem found")
         # copy h5 file to new location to be analyzed later
         for testcycle in range(10):
-            outfile=DateDirPath+"/bitswap-"+DateDirPath+"-"+ChipSN+"-"+testcycle+".h5"
+            outfile=DateDirPath+"/bitswap-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
             if not os.path.isfile(outfile): break
         subprocess.run(["cp","testing.h5",outfile])
 
@@ -181,14 +183,17 @@ BaselineDirPath = DateDirPath+"/baselines/"
 if not os.path.exists(BaselineDirPath) : os.mkdir(BaselineDirPath)
 
 #plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
-fig.write_html(BaselineDirPath+"Baseline_"+ChipSN+".html",auto_open=False )
+for testcycle in range(10):
+	outfile=BaselineDirPath+"/Baseline_"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".html"
+	if not os.path.isfile(outfile): break
+fig.write_html(outfile,auto_open=False )
 
 BaselineLoop(datachunk,0,NumASICchannels-1)
 
 # Save raw .h5 baseline data
 # copy h5 file to new location to be analyzed later
 for testcycle in range(10):
-	outfile=BaselineDirPath+"/bpsraw-"+DateDirPath+"-"+ChipSN+"-"+testcycle+".h5"
+	outfile=BaselineDirPath+"/bpsraw-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
 	if not os.path.isfile(outfile): break
 subprocess.run(["cp","testing.h5",outfile])
 
@@ -310,8 +315,8 @@ for chan in range(NumASICchannels):
 			#MinMean = round(theMean - 1.0 * max(theErrMean,0.0),2)
 			#MaxStd = round(theStd + 1.0 * max(theErrStd,0.0),2)
 			#MinStd = round(theStd - 1.0 * max(theErrStd,0.0),2)
-			MaxMean = 25.0 
-			MinMean = 5.0 
+			MaxMean = 230.0 
+			MinMean = 180.0 
 			MaxStd = 4.0 
 			MinStd = 0.3
 		# Not sure this part is right, try the version from v2astd.py 
