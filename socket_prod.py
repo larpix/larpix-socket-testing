@@ -23,6 +23,8 @@ import csv
 #import t
 global SNList
 global PacmanVersion
+global ForceRegisterWrites 
+ForceRegisterWrites = True
 PacmanVersion = 'RevS1'
 #PacmanVersion = 'pacman4'
 
@@ -501,10 +503,10 @@ def init_chips_v2c(c,io_channel):
 	#print(verified,returnregisters)
 	# Try write/read once only
 	PassedConfigAt=0
-	ok, diff = c.verify_configuration(chip_key, n=1 )
+	#ok, diff = c.verify_configuration(chip_key, n=1 )
 	# Try readback twice, only write once
 	if ok : 
-		print(ok,' Passed at verify n=1')
+		print(ok,' Passed on first enforce_configuration n=2, n_verify=2')
 		PassedConfigAt=1
 	else:  
 		#print('Failed with verify n=1',diff)
@@ -846,7 +848,10 @@ def ReadChannelLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1,monitor=0):
 	#c.stop_listening()
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.periodic_trigger_mask = [1] * NumASICchannels  # Turn off all channels
-	c.write_configuration(chip.chip_key)
+	if ForceRegisterWrites == True:
+		c.enforce_configuration(chip.chip_key)
+	else:
+		c.write_configuration(chip.chip_key)
 
 
 def ReadChannel(c,chip,chan,monitor=0):
@@ -868,21 +873,46 @@ def ReadChannel(c,chip,chan,monitor=0):
 		# Enable analog monitor on channel
 		c.enable_analog_monitor(chip.chip_key,chan)
 		print("Running Analog mon for Pulser on channel ",chan)
-	c.write_configuration(chip.chip_key)
+	c.write_configuration(chip.chip_key,'periodic_trigger_mask')
+	c.write_configuration(chip.chip_key,'channel_mask')
+	c.write_configuration(chip.chip_key,'periodic_trigger_mask')
+	c.write_configuration(chip.chip_key,'channel_mask')
+	#c.enforce_configuration((chip.chip_key,'periodic_trigger_mask'))  # this construction doesn't exist, wants integer register?
+	#c.enforce_configuration((chip.chip_key,'channel_mask'))  # this construction doesn't exist, wants integer register?
 	if  chan == 0 :
-		c.verify_configuration(chip.chip_key,n=2) # this should store config before first data segment.
+		if ForceRegisterWrites == True:
+			c.enforce_configuration(chip.chip_key)  # this should store config before first data segment.
+		else:
+			c.verify_configuration(chip.chip_key,n=1) # this should store config before first data segment.
+
 	print('***************************************')
 	print('****      READ CHANNEL             ****')
 	print('***************************************')
 	#print(chip.config)
 	#c.verify_configuration(chip.chip_key,n=2)
 	loop=0
-	looplimit=1
+	readpackets=0
+	minpackets=400
+	readchannel=None
+	looplimit=4
 	while loop<looplimit :
 		# Read some Data (this also delays a bit)
 		c.run(0.1,'test')
 		#print(c.reads[-1])
-		print("read ",len(c.reads[-1])," packets")
+		readpackets=len(c.reads[-1])
+		for packet in range(10):
+			#print(c.reads[-1][-packet])
+			if c.reads[-1][-packet].chip_key == chip.chip_key:
+				readchannel=c.reads[-1][-packet].channel_id
+			if readchannel != None:
+				break
+		#print("readchannel is ",readchannel)
+		print("read ",readpackets," packets")
+		if readchannel == chan and readpackets > minpackets :
+			break
+		else:
+			c.write_configuration(chip.chip_key,'periodic_trigger_mask')
+			c.write_configuration(chip.chip_key,'channel_mask')
 		#wait_here()
 		loop=loop+1
 
@@ -1003,9 +1033,13 @@ def get_baseline_periodicselftrigger(c,chip):
 			#open file for output
 			ChipSN=mychipIDBox[0].get()
 			if not os.path.exists(DateDirPath+"/baselines"): os.makedirs(DateDirPath+"/baselines")
-			for testcycle in range(10):
+			testcycle=0
+			maxtestcycle=100
+			while testcycle < maxtestcycle:
 				ProcessLogFileName=DateDirPath+"/baselines/baseline-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
-				if not os.path.isfile(ProcessLogFileName): break
+				if not os.path.isfile(ProcessLogFileName): 
+					break
+				testcycle=testcycle+1
 			ProcessLogFile=open(ProcessLogFileName,'w')
 		# omit 'shell=True' when using a list for Popen, otherwise shell gets the extra args, Argh
 		with Popen(cmd, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:

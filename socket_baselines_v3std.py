@@ -78,9 +78,12 @@ def BaselineLoop(data,firstChan=0,lastChan=NumASICchannels-1):
     if TimeAnomaly!=0 or ChipIDAnomaly!=0 :
         print("Bit problem found")
         # copy h5 file to new location to be analyzed later
-        for testcycle in range(10):
+        testcycle=0
+        maxtestcycle=100
+        while testcycle < maxtestcycle:
             outfile=DateDirPath+"/bitswap-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
             if not os.path.isfile(outfile): break
+        testcycle=testcycle+1
         subprocess.run(["cp","testing.h5",outfile])
 
 def BaselineMeanStd(data,chan):
@@ -183,18 +186,24 @@ BaselineDirPath = DateDirPath+"/baselines/"
 if not os.path.exists(BaselineDirPath) : os.mkdir(BaselineDirPath)
 
 #plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
-for testcycle in range(10):
+testcycle=0
+maxtestcycle=100
+while testcycle < maxtestcycle:
 	outfile=BaselineDirPath+"/Baseline_"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".html"
 	if not os.path.isfile(outfile): break
+	testcycle=testcycle+1
 fig.write_html(outfile,auto_open=False )
 
 BaselineLoop(datachunk,0,NumASICchannels-1)
 
 # Save raw .h5 baseline data
 # copy h5 file to new location to be analyzed later
-for testcycle in range(10):
+testcycle=0
+maxtestcycle=100
+while testcycle < maxtestcycle:
 	outfile=BaselineDirPath+"/bpsraw-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
 	if not os.path.isfile(outfile): break
+	testcycle=testcycle+1
 subprocess.run(["cp","testing.h5",outfile])
 
 
