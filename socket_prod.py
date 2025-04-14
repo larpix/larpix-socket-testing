@@ -19,6 +19,7 @@ import runpy
 import numpy as np
 import simpleaudio as sa
 import tcp_server_prod as tsp
+import random
 import csv
 #import t
 global SNList
@@ -410,6 +411,28 @@ def conf_root(c,cm,cadd,iog,iochan):
 	#print('c.chips')
 	#print(c.chips)
 
+def test_config_verify(c,chip_key):
+    count = 0
+    NTESTS = 100
+
+    for trial in range(NTESTS):
+
+        print(f'Test: {trial+1}/{NTESTS}')
+
+        l = [random.randint(0, 31) for _ in range(64)]
+        c[chip_key].config.pixel_trim_dac = l
+        #c.write_configuration(chip_key, 'pixel_trim_dac')
+        c.write_configuration(chip_key)
+
+        ok, diff = c.verify_configuration(chip_key, timeout=0.01, connection_delay=0.01, n=1)
+
+        if ok:
+            count += 1
+        else:
+            print(diff)
+
+    print(count)
+
 def init_chips_v2c(c,io_channel):
 	###########################################
 	IO_GROUP = 1
@@ -497,6 +520,9 @@ def init_chips_v2c(c,io_channel):
 
 	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+	##################################
+	#test_config_verify(c,chip_key)
+	##################################
 	#c.write_configuration(chip_key)
 	ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
 	#verified,returnregisters=c.verify_configuration(chip_key)
@@ -906,7 +932,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 				readchannel=c.reads[-1][-packet].channel_id
 			if readchannel != None:
 				break
-		#print("readchannel is ",readchannel)
+		print("readchannel is ",readchannel)
 		print("read ",readpackets," packets")
 		if readchannel == chan and readpackets > minpackets :
 			break
