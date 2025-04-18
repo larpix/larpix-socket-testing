@@ -324,8 +324,8 @@ for chan in range(NumASICchannels):
 			#MinMean = round(theMean - 1.0 * max(theErrMean,0.0),2)
 			#MaxStd = round(theStd + 1.0 * max(theErrStd,0.0),2)
 			#MinStd = round(theStd - 1.0 * max(theErrStd,0.0),2)
-			MaxMean = 230.0 
-			MinMean = 180.0 
+			MaxMean = 250.0 
+			MinMean = 200.0 
 			MaxStd = 4.0 
 			MinStd = 0.3
 		# Not sure this part is right, try the version from v2astd.py 

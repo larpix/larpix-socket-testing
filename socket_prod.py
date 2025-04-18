@@ -411,6 +411,16 @@ def conf_root(c,cm,cadd,iog,iochan):
 	#print('c.chips')
 	#print(c.chips)
 
+def report_enf_conf_results(ok,diff,chip_key,comment=''):
+	if ok:
+		print('Enforce_config succeeded ')
+	else:
+		#print([register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None])
+		n_not_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None] )
+		n_diff_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is not None] )
+		print('Found differences in enf config with ',n_not_returned,' not responding and ',n_diff_returned,' differences ',comment)
+
+
 def test_config_verify(c,chip_key):
     count = 0
     NTESTS = 100
@@ -421,8 +431,8 @@ def test_config_verify(c,chip_key):
 
         l = [random.randint(0, 31) for _ in range(64)]
         c[chip_key].config.pixel_trim_dac = l
-        #c.write_configuration(chip_key, 'pixel_trim_dac')
-        c.write_configuration(chip_key)
+        c.write_configuration(chip_key, 'pixel_trim_dac')
+        #c.write_configuration(chip_key)
 
         ok, diff = c.verify_configuration(chip_key, timeout=0.01, connection_delay=0.01, n=1)
 
@@ -445,12 +455,12 @@ def init_chips_v2c(c,io_channel):
 	2.4	58481.31
 	2.5	60817.76
 	'''
-	VDDA_DAC= 44500 # ~1.8 V
+	#VDDA_DAC= 44500 # ~1.8 V
 	#VDDD_DAC = 28500 # ~1.1 V
 	#VDDA_DAC = 55000 # 2.2V
 	#VDDA_DAC = 56000  # 2.23v
 	#VDDA_DAC = 56500 # 2.25V
-	#VDDA_DAC = 63000 # 2.5V
+	VDDA_DAC = 63000 # 2.5V
 	#VDDA_DAC = 65535 # 2.59V
 	#VDDD_DAC = 44500
 	VDDD_DAC = 30000   #~1.2V
@@ -478,8 +488,8 @@ def init_chips_v2c(c,io_channel):
 		# disable tile power, LARPIX clock
 		c.io.set_reg(0x00000010, 0, io_group)
 		# set up mclk in pacman
-		#c.io.set_reg(0x101c, 0x4, io_group)
-		c.io.set_uart_clock_ratio(IO_CHAN,   1)
+		c.io.set_reg(0x101c, 0x4, io_group)
+		c.io.set_uart_clock_ratio(IO_CHAN,   5)
 
 		# enable pacman power
 		c.io.set_reg(0x00000014, 1, io_group)
@@ -519,25 +529,43 @@ def init_chips_v2c(c,io_channel):
 		time.sleep(0.01)
 
 	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
+	#print('chip_key=',chip_key)
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+	conf_root_tries=1
+	conf_root_tries_limit=4
+	while not c.verify_registers([(chip_key,122)],timeout=0.02) :
+		print('chip_id reg 122 did not verify')
+		#print(c.read_configuration(chip_key,'chip_id',timeout=0.02))
+		print(c.verify_registers([(chip_key,122)],timeout=0.02))
+		RESET_CYCLES = 50000
+		c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
+		time.sleep(0.01)	
+		#conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+		c.write_configuration(chip_key)
+		conf_root_tries +=1
+		if conf_root_tries > conf_root_tries_limit:
+			print('Tried write_configuration ',conf_root_tries,' times, limit is ',conf_root_tries_limit)
+			break
+	ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+	report_enf_conf_results(ok,diff,chip_key,' after conf_root')
 	##################################
 	#test_config_verify(c,chip_key)
 	##################################
 	#c.write_configuration(chip_key)
-	ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
-	#verified,returnregisters=c.verify_configuration(chip_key)
-	#print(verified,returnregisters)
+	#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
 	# Try write/read once only
 	PassedConfigAt=0
-	#ok, diff = c.verify_configuration(chip_key, n=1 )
+	ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
+	print('Found ',len(diff),' differences in verify_config')
 	# Try readback twice, only write once
 	if ok : 
-		print(ok,' Passed on first enforce_configuration n=2, n_verify=2')
+		print(ok,' Passed at first verify n=1 ')
 		PassedConfigAt=1
 	else:  
 		#print('Failed with verify n=1',diff)
 		print('Failed with verify n=1')
-		ok, diff = c.verify_configuration(chip_key, n=2 )
+		ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=2 )
+		print('Found ',len(diff),' differences in verify_config')
 	# Try writing twice / reading twice
 	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at verify n=2')
@@ -545,16 +573,26 @@ def init_chips_v2c(c,io_channel):
 	elif PassedConfigAt==0:
 		#print('Failed with verify n=2',diff)		
 		print('Failed with verify n=2')		
-		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
+		ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+		report_enf_conf_results(ok,diff,chip_key,'after verify n=2 failed')
+		#print('Found ',len(diff),' differences in first enf config')
 	if ok and PassedConfigAt==0 : 
-		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
+		print(ok,' Passed at enforce_configuration  timeout=0.02,n=2,n_verify=2')
 		PassedConfigAt=3
 	elif PassedConfigAt==0:
-		#print('Failed with enforce_configuration n=2,n_verify=2',diff)		 
-		print('Failed with enforce_configuration n=2,n_verify=2')		 
-	#print('list(c.chips.values()= ',list(c.chips.values()))
-	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
-	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
+		enforcelimit=3
+		enforcecount=0
+		while not ok and enforcecount < enforcelimit :
+			print('trying enforce again...')
+			ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+			report_enf_conf_results(ok,diff,chip_key,'while enforcing again')
+			#print('Found ',len(diff),' differences in first enf config')
+			enforcecount +=1
+		if not ok:
+			#print('Failed with enforce_configuration  timeout=0.02,n=2,n_verify=2',diff)		 
+			print('Failed with enforce_configuration  timeout=0.02,n=2,n_verify=2 on try ',enforcecount)		 
+		else:
+			PassedConfigAt = 3 + enforcecount
 	# Write results of interface config to dated file
 	# New dated file paths and names  
 	configChipResFileName=DateDirPath+"/chipconfig"+DateDirPath+".csv"
@@ -875,7 +913,7 @@ def ReadChannelLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1,monitor=0):
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.periodic_trigger_mask = [1] * NumASICchannels  # Turn off all channels
 	if ForceRegisterWrites == True:
-		c.enforce_configuration(chip.chip_key)
+		c.enforce_configuration(chip.chip_key, timeout=0.02,)
 	else:
 		c.write_configuration(chip.chip_key)
 
@@ -907,7 +945,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 	#c.enforce_configuration((chip.chip_key,'channel_mask'))  # this construction doesn't exist, wants integer register?
 	if  chan == 0 :
 		if ForceRegisterWrites == True:
-			c.enforce_configuration(chip.chip_key)  # this should store config before first data segment.
+			c.enforce_configuration(chip.chip_key, timeout=0.02)  # this should store config before first data segment.
 		else:
 			c.verify_configuration(chip.chip_key,n=1) # this should store config before first data segment.
 
@@ -926,19 +964,21 @@ def ReadChannel(c,chip,chan,monitor=0):
 		c.run(0.1,'test')
 		#print(c.reads[-1])
 		readpackets=len(c.reads[-1])
-		for packet in range(10):
-			#print(c.reads[-1][-packet])
-			if c.reads[-1][-packet].chip_key == chip.chip_key:
-				readchannel=c.reads[-1][-packet].channel_id
-			if readchannel != None:
-				break
-		print("readchannel is ",readchannel)
 		print("read ",readpackets," packets")
+		if readpackets > 10:
+			for packet in range(1,10):
+				#print('packet ',packet,' ',c.reads[-1][-packet])
+				if c.reads[-1][-packet].chip_key == chip.chip_key:
+					readchannel=c.reads[-1][-packet].channel_id
+				if readchannel != None:
+					break
+			print("readchannel is ",readchannel)
 		if readchannel == chan and readpackets > minpackets :
 			break
 		else:
 			c.write_configuration(chip.chip_key,'periodic_trigger_mask')
 			c.write_configuration(chip.chip_key,'channel_mask')
+			print('Trying again')
 		#wait_here()
 		loop=loop+1
 
