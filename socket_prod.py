@@ -25,7 +25,7 @@ import csv
 global SNList
 global PacmanVersion
 global ForceRegisterWrites 
-ForceRegisterWrites = True
+ForceRegisterWrites = False
 PacmanVersion = 'RevS1'
 #PacmanVersion = 'pacman4'
 
@@ -413,12 +413,12 @@ def conf_root(c,cm,cadd,iog,iochan):
 
 def report_enf_conf_results(ok,diff,chip_key,comment=''):
 	if ok:
-		print('Enforce_config succeeded ')
+		print('Verify succeeded ',comment)
 	else:
 		#print([register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None])
 		n_not_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None] )
 		n_diff_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is not None] )
-		print('Found differences in enf config with ',n_not_returned,' not responding and ',n_diff_returned,' differences ',comment)
+		print('Found differences in verify config with ',n_not_returned,' not responding and ',n_diff_returned,' differences ',comment)
 
 
 def test_config_verify(c,chip_key):
@@ -533,20 +533,25 @@ def init_chips_v2c(c,io_channel):
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 	conf_root_tries=1
 	conf_root_tries_limit=4
-	while not c.verify_registers([(chip_key,122)],timeout=0.02) :
-		print('chip_id reg 122 did not verify')
-		#print(c.read_configuration(chip_key,'chip_id',timeout=0.02))
-		print(c.verify_registers([(chip_key,122)],timeout=0.02))
-		RESET_CYCLES = 50000
-		c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
-		time.sleep(0.01)	
-		#conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+	if c.verify_registers([(chip_key,122)],timeout=0.02)[0] :
+		print('chip_id succeeded, write all registers')
 		c.write_configuration(chip_key)
-		conf_root_tries +=1
-		if conf_root_tries > conf_root_tries_limit:
-			print('Tried write_configuration ',conf_root_tries,' times, limit is ',conf_root_tries_limit)
-			break
-	ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+	else:
+		while not c.verify_registers([(chip_key,122)],timeout=0.02)[0] :
+			print('chip_id reg 122 did not verify')
+			#print(c.read_configuration(chip_key,'chip_id',timeout=0.02))
+			print(c.verify_registers([(chip_key,122)],timeout=0.02))
+			RESET_CYCLES = 50000
+			c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
+			time.sleep(0.01)	
+			#conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+			c.write_configuration(chip_key)
+			conf_root_tries +=1
+			if conf_root_tries > conf_root_tries_limit:
+				print('Tried write_configuration ',conf_root_tries,' times, limit is ',conf_root_tries_limit)
+				break
+	#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+	ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
 	report_enf_conf_results(ok,diff,chip_key,' after conf_root')
 	##################################
 	#test_config_verify(c,chip_key)
@@ -556,7 +561,8 @@ def init_chips_v2c(c,io_channel):
 	# Try write/read once only
 	PassedConfigAt=0
 	ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
-	print('Found ',len(diff),' differences in verify_config')
+	report_enf_conf_results(ok,diff,chip_key,' in verify_config after conf_root')
+	#print('Found ',len(diff),' differences in verify_config')
 	# Try readback twice, only write once
 	if ok : 
 		print(ok,' Passed at first verify n=1 ')
@@ -573,24 +579,28 @@ def init_chips_v2c(c,io_channel):
 	elif PassedConfigAt==0:
 		#print('Failed with verify n=2',diff)		
 		print('Failed with verify n=2')		
-		ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+		#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+		c.write_configuration(chip_key)
+		ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
 		report_enf_conf_results(ok,diff,chip_key,'after verify n=2 failed')
 		#print('Found ',len(diff),' differences in first enf config')
 	if ok and PassedConfigAt==0 : 
-		print(ok,' Passed at enforce_configuration  timeout=0.02,n=2,n_verify=2')
+		print(ok,' Passed after another write/verify')
 		PassedConfigAt=3
 	elif PassedConfigAt==0:
 		enforcelimit=3
 		enforcecount=0
 		while not ok and enforcecount < enforcelimit :
-			print('trying enforce again...')
-			ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+			print('trying write/verify again...')
+			#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+			c.write_configuration(chip_key)
+			ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
 			report_enf_conf_results(ok,diff,chip_key,'while enforcing again')
 			#print('Found ',len(diff),' differences in first enf config')
 			enforcecount +=1
 		if not ok:
 			#print('Failed with enforce_configuration  timeout=0.02,n=2,n_verify=2',diff)		 
-			print('Failed with enforce_configuration  timeout=0.02,n=2,n_verify=2 on try ',enforcecount)		 
+			print('Failed write/verify on try ',enforcecount)		 
 		else:
 			PassedConfigAt = 3 + enforcecount
 	# Write results of interface config to dated file
@@ -947,6 +957,7 @@ def ReadChannel(c,chip,chan,monitor=0):
 		if ForceRegisterWrites == True:
 			c.enforce_configuration(chip.chip_key, timeout=0.02)  # this should store config before first data segment.
 		else:
+			c.write_configuration(chip.chip_key)
 			c.verify_configuration(chip.chip_key,n=1) # this should store config before first data segment.
 
 	print('***************************************')
