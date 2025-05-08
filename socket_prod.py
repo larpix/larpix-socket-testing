@@ -504,12 +504,29 @@ def init_chips_v2c(c,io_channel):
 	#VDDA_DAC = 55000 # 2.2V
 	#VDDA_DAC = 56000  # 2.23v
 	#VDDA_DAC = 56500 # 2.25V
-	VDDA_DAC = 63000 # 2.5V
+	#VDDA_DAC = 63000 # 2.5V
 	#VDDA_DAC = 65535 # 2.59V
 	#VDDD_DAC = 44500
-	VDDD_DAC = 30000   #~1.2V
+	#VDDD_DAC = 30000   #~1.2V
 	#VDDD_DAC = 44500 #~1.8V
 	RESET_CYCLES = 300000 #5000000
+
+	# set the voltage for different ASIC versions
+	if ASICversion.get() == 'v2b':
+		VDDD_DAC = 43785
+		VDDA_DAC = 43875
+	elif ASICversion.get() == 'v2c':
+		VDDD_DAC = 30000
+		VDDA_DAC = 44500
+	elif ASICversion.get() == 'v2d':
+		VDDD_DAC = 30000
+		VDDA_DAC = 44500
+	elif ASICversion.get() == 'v3':
+		VDDA_DAC = 63000 # 2.5V
+		VDDD_DAC = 30000   #~1.2V
+	else:
+		print('Unknown ASIC version: ',ASICversion.get())
+		return
 
 	REF_CURRENT_TRIM=0
 	###########################################
@@ -533,7 +550,12 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x00000010, 0, io_group)
 		# set up mclk in pacman
 		c.io.set_reg(0x101c, 0x4, io_group)
-		c.io.set_uart_clock_ratio(IO_CHAN,   5)
+		if ASICversion.get() == 'v3':
+			c.io.set_uart_clock_ratio(IO_CHAN,   5)
+			print('configuring uart clock for v3')
+		else: # anything not v3 gets 5MHz data uart clock
+			print('configuring uart clock for v2')
+			c.io.set_uart_clock_ratio(IO_CHAN,   10)
 
 		# enable pacman power
 		c.io.set_reg(0x00000014, 1, io_group)
@@ -579,7 +601,7 @@ def init_chips_v2c(c,io_channel):
 		powerlog.write(ChipSN+' vdda: '+f'{readback[2][0]:.2f}'+' mV idda: '+f'{readback[2][1]:.2f}'+
 				 ' mA  vddd: '+f'{readback[2][2]:.2f}'+' mV  iddd: '+f'{readback[2][3]:.2f}'+' mA\n')
 
-	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
+	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn dealt with in conf_root
 	#print('chip_key=',chip_key)
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 	#print(c[chip_key].config)
