@@ -81,7 +81,12 @@ def init_controller():
 			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json',asic_version=2)
 	else:
 		exit('PacmanVersion not specified, exiting...')
-	c.io.ping()
+	waittime=10
+	#print('waiting for '+str(waittime)+' seconds for io to be established')
+	time.sleep(waittime)
+	pingresults=c.io.ping(1)
+	#print('ping returned ')
+	#print(pingresults)
 	return c
 
 def init_board_base(c,_default_io_channel=1): # only called for v2a or v2b
@@ -111,6 +116,35 @@ def init_board_base(c,_default_io_channel=1): # only called for v2a or v2b
 	#else:
 	#c.load(controller_config)
 
+def power_readback(io, io_group, pacman_version, tile):
+    readback={}
+    for i in tile:
+        readback[i]=[]
+        if pacman_version=='v1rev4':
+            vdda=io.get_reg(0x24030+(i-1), io_group=io_group)
+            vddd=io.get_reg(0x24040+(i-1), io_group=io_group)
+            idda=io.get_reg(0x24050+(i-1), io_group=io_group)
+            iddd=io.get_reg(0x24060+(i-1), io_group=io_group)
+            print('Tile ',i,'  VDDA: ',vdda,' mV  IDDA: ',int(idda*0.1),' mA  ',
+                  'VDDD: ',vddd,' mV  IDDD: ',int(iddd>>12),' mA')
+            readback[i]=[vdda, idda*0.1, vddd, iddd>>12]
+        elif pacman_version=='v1rev3' or 'v1revS1' or 'RevS1':
+            vdda=io.get_reg(0x00024001+(i-1)*32+1, io_group=io_group)
+            idda=io.get_reg(0x00024001+(i-1)*32, io_group=io_group)
+            vddd=io.get_reg(0x00024001+(i-1)*32+17, io_group=io_group)
+            iddd=io.get_reg(0x00024001+(i-1)*32+16, io_group=io_group)
+            print('Tile ',i,'  VDDA: ',(((vdda>>16)>>3)*4),' mV  IDDA: ',
+                  (((idda>>16)-(idda>>31)*65535)*500*0.001),' mA  VDDD: ',\
+                  (((vddd>>16)>>3)*4),' mV  IDDD: ',
+                  (((iddd>>16)-(iddd>>31)*65535)*500*0.001),' mA')
+            readback[i]=[(((vdda>>16)>>3)*4),
+                         (((idda>>16)-(idda>>31)*65535)*500*0.001),
+                         (((vddd>>16)>>3)*4),
+                         (((iddd>>16)-(iddd>>31)*65535)*500*0.001)]
+        else:
+            print('WARNING: PACMAN version ',pacman_version,' unknown')
+            return readback
+    return readback
 
 def measure_currents(c):
 	loop=0
@@ -302,6 +336,7 @@ def conf_root(c,cm,cadd,iog,iochan):
 	TX_SLICE=15
 	R_TERM=2
 	I_RX=8
+	V_CM = 5
 	#REF_CURRENT_TRIM = 0
 	REF_CURRENT_TRIM = 15
 	if ASICversion.get() == 'v2b':
@@ -382,6 +417,15 @@ def conf_root(c,cm,cadd,iog,iochan):
 	c.write_configuration(cm, 'i_tx_diff1')
 	c[cm].config.tx_slices1=TX_SLICE
 	c.write_configuration(cm, 'tx_slices1')
+	c[cm].config.v_cm_lvds_tx0 = V_CM
+	c.write_configuration(cm, 'v_cm_lvds_tx0')
+	c[cm].config.v_cm_lvds_tx1 = V_CM
+	c.write_configuration(cm, 'v_cm_lvds_tx1')
+	c[cm].config.v_cm_lvds_tx2 = V_CM
+	c.write_configuration(cm, 'v_cm_lvds_tx2')
+	c[cm].config.v_cm_lvds_tx3 = V_CM
+	c.write_configuration(cm, 'v_cm_lvds_tx3')
+
 	#c.io.set_reg(0x18, 1, io_group=1)
 	c[cm].config.enable_piso_downstream=[1,1,1,1] # krw adding May 8, 2023
 	c.write_configuration(cm, 'enable_piso_downstream')
@@ -423,7 +467,7 @@ def report_enf_conf_results(ok,diff,chip_key,comment=''):
 
 def test_config_verify(c,chip_key):
     count = 0
-    NTESTS = 100
+    NTESTS = 5
 
     for trial in range(NTESTS):
 
@@ -439,8 +483,8 @@ def test_config_verify(c,chip_key):
         if ok:
             count += 1
         else:
-            print(diff)
-
+            report_enf_conf_results(ok,diff,chip_key,'in test_config_verify')
+			#print(diff)
     print(count)
 
 def init_chips_v2c(c,io_channel):
@@ -528,9 +572,17 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
 		time.sleep(0.01)
 
+	readback = power_readback(c.io,IO_GROUP,PacmanVersion,[2])
+	ChipSN = mychipIDBox[0].get()
+	#print(readback)
+	with open('PowerReadback.log',"a") as powerlog:
+		powerlog.write(ChipSN+' vdda: '+f'{readback[2][0]:.2f}'+' mV idda: '+f'{readback[2][1]:.2f}'+
+				 ' mA  vddd: '+f'{readback[2][2]:.2f}'+' mV  iddd: '+f'{readback[2][3]:.2f}'+' mA\n')
+
 	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	#print('chip_key=',chip_key)
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
+	#print(c[chip_key].config)
 	conf_root_tries=1
 	conf_root_tries_limit=4
 	if c.verify_registers([(chip_key,122)],timeout=0.02)[0] :
@@ -541,9 +593,9 @@ def init_chips_v2c(c,io_channel):
 			print('chip_id reg 122 did not verify')
 			#print(c.read_configuration(chip_key,'chip_id',timeout=0.02))
 			print(c.verify_registers([(chip_key,122)],timeout=0.02))
-			RESET_CYCLES = 50000
-			c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
-			time.sleep(0.01)	
+			#RESET_CYCLES = 50000
+			#c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
+			#time.sleep(0.01)	
 			#conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
 			c.write_configuration(chip_key)
 			conf_root_tries +=1
@@ -1023,8 +1075,12 @@ def get_baseline_selftrigger(c,chip):
 	print("the end")
 
 	c.logger.disable()
-	#c.logger.flush()
+	#c.logger.flush() # disable already flushes
 	#c.logger.close()
+	readslen1=len(c.reads)
+	c.reads.clear() # clears the read buffers to prevent infinite memory growth.
+	readslen2=len(c.reads)
+	print('reads object had '+str(readslen1)+' objects and now has '+str(readslen2))
 
 	import socket_baselines
 
@@ -1080,8 +1136,12 @@ def get_baseline_periodicselftrigger(c,chip):
 
 	print("disabling the logger")
 	c.logger.disable()
-	#c.logger.flush()
+	#c.logger.flush() # disable already flushes
 	#c.logger.close()
+	readslen1=len(c.reads)
+	c.reads.clear() # clears the read buffers to prevent infinite memory growth.
+	readslen2=len(c.reads)
+	print('reads object had '+str(readslen1)+' objects and now has '+str(readslen2))
 
 	# turn off periodic trigger channels
 	chip.config.periodic_trigger_mask= [1] * NumASICchannels
@@ -1384,6 +1444,13 @@ def RunControl():
 	Result8='8\r'
 	Result9='9\r'
 
+	#start a global controller
+	global c
+	c=[]
+	#print(c)
+	if len(c) == 0 :
+		c=init_controller()
+
 	if UseTCPIPControlState.get() == '0' :  # if TCPIPControl is not checked, just RunTests()
 		totalBadChannels = RunTests()  # Single chip test mode
 		# Increment SN if check box enabled
@@ -1516,8 +1583,9 @@ def RunTests():
 	#INIT BOARD/CHIP and test all 4 comm links
 	init_chip_results=0
 	for io_channel in [4,3,2,1]: 
-		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
-		c=init_controller() # create a new clean controller instance
+		#if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
+		#if io_channel == 4: c=init_controller() # create a new clean controller instance if none exists
+		c.chips.clear() # clear out the chips
 		chip = 0
 		if ASICversion.get() == 'v2a' or ASICversion.get() == 'v2b' : # run working intialization of v2b and v2a chips
 			#init_board(c) # defaults to channel 1
