@@ -2,6 +2,7 @@
 
 import socket
 import time
+import sys
 
 # This will serve as the interface to the chip handler. Interaction via TCP/IP is simple.
 # it will start a server listening on PORTNUM and will control and respond to the 
@@ -85,8 +86,10 @@ def CheckSocketForData (conn):
 		print('waiting...')
 		print('Getting nothing, closing connection')
 		conn.close()
-		return
+		print('Chip handler exited, Exiting Asic Testing ')
+		sys.exit()  # Should be able to do this better.
+		#return -999
 	else  :
 		print('Received unknown ', data, ' as data')
-	return
+	return -999
 

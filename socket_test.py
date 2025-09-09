@@ -1321,6 +1321,11 @@ def RunControl():
 						print('Starting tests')
 						# Run Tests
 						ResultNum=RunTests()
+					elif message == -999 : 
+						print('Handler TCPIP Disconnected, Exiting...')
+						exit()
+					else :
+						print('Unexpected message from handler ',message)
 					
 				#time.sleep(5)
 				#ResultNum=0 # Fake result for testing

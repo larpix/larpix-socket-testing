@@ -26,10 +26,14 @@ print(f"Arguments count: {len(sys.argv)}")
 print(sys.argv)
 if len(sys.argv) >= 2 : #We got some arguments passed to our python code, it should be the output dir
     DateDirPath = sys.argv[1]
-    print("Using output dir ",DateDirPath)
+    if len(sys.argv)>2 :
+        BasePath = sys.argv[2]
+    else:
+        BasePath=''
+    print("Using output dir ",DateDirPath, ' and BasePath ',BasePath)
 else:
     DateDirPath = time.strftime("%y%m%d")
-if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
+if not os.path.exists(BasePath+DateDirPath) : os.mkdir(BasePath+DateDirPath)
 
 NumASICchannels = 64
 global TimeAnomaly
@@ -81,7 +85,7 @@ def BaselineLoop(data,firstChan=0,lastChan=NumASICchannels-1):
         testcycle=0
         maxtestcycle=100
         while testcycle < maxtestcycle:
-            outfile=DateDirPath+"/bitswap-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
+            outfile=BasePath+DateDirPath+"/bitswap-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".h5"
             if not os.path.isfile(outfile): break
         testcycle=testcycle+1
         subprocess.run(["cp","testing.h5",outfile])
@@ -182,7 +186,7 @@ fig.update_layout(barmode='overlay')
 if os.getenv('socket_PlotBaselineChannels')=='1':
 	fig.show()	
 
-BaselineDirPath = DateDirPath+"/baselines/"
+BaselineDirPath = BasePath+DateDirPath+"/baselines/"
 if not os.path.exists(BaselineDirPath) : os.mkdir(BaselineDirPath)
 
 #plotly.offline.plot(fig,filename="baselines/Baseline_"+ChipSN+".html",auto_open=False )
@@ -248,7 +252,7 @@ for chan in range(NumASICchannels):
 #summaryFrame.to_csv("t.csv",mode='a',header=False)
 
 # New dated file paths and names  
-summaryFile=DateDirPath+"/bps-summary"+DateDirPath+".csv"
+summaryFile=BasePath+DateDirPath+"/bps-summary"+DateDirPath+".csv"
 # If file exists, append with no header
 if os.path.exists(summaryFile) : summaryFrame.to_csv(summaryFile,mode='a',header=False)
 # else create file with header

@@ -182,9 +182,10 @@ def wait_here():
 def test_config_registers(c,chip):
 	#print(chip.config)
 	#invert chip config (for many registers)
-	# CSA GAIN
-	flipmask=0b1
-	chip.config.csa_gain=flipmask^chip.config.csa_gain
+	if ASICversion.get() == 'v2' or ASICversion.get() == 'v2b' or ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' :
+		# CSA GAIN
+		flipmask=0b1
+		chip.config.csa_gain=flipmask^chip.config.csa_gain
 	# CSA BYPASS ENABLE
 	flipmask=0b1
 	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
@@ -253,9 +254,10 @@ def test_config_registers(c,chip):
 		return 2
 
 	#invert chip config (for many registers) (returns to original)
-	# CSA GAIN
-	flipmask=0b1
-	chip.config.csa_gain=flipmask^chip.config.csa_gain
+	if ASICversion.get() == 'v2' or ASICversion.get() == 'v2b' or ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' :
+		# CSA GAIN
+		flipmask=0b1
+		chip.config.csa_gain=flipmask^chip.config.csa_gain
 	# CSA BYPASS ENABLE
 	flipmask=0b1
 	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
@@ -519,7 +521,7 @@ def init_chips_v2c(c,io_channel):
 		VDDD_DAC = 30000
 		VDDA_DAC = 44500
 	elif ASICversion.get() == 'v2d':
-		VDDD_DAC = 30000
+		VDDD_DAC = 44500 # changed from 30000 to 44500 on 5/13/2025, 
 		VDDA_DAC = 44500
 	elif ASICversion.get() == 'v3':
 		VDDA_DAC = 63000 # 2.5V
@@ -679,7 +681,7 @@ def init_chips_v2c(c,io_channel):
 			PassedConfigAt = 3 + enforcecount
 	# Write results of interface config to dated file
 	# New dated file paths and names  
-	configChipResFileName=DateDirPath+"/chipconfig"+DateDirPath+".csv"
+	configChipResFileName=BasePath+DateDirPath+"/chipconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	ChipSN=mychipIDBox[0].get()
 	if os.path.exists(configChipResFileName) : 
@@ -1139,7 +1141,10 @@ def get_baseline_periodicselftrigger(c,chip):
 	subprocess.run(["rm","testing.h5"])
 
 	#logger declared and switched enabled.
-	c.logger = HDF5Logger("testing.h5", buffer_length=1000000)
+	if ASICversion.get() == 'v3':
+		c.logger = HDF5Logger("testing.h5", buffer_length=1000000) # default to "latest version"
+	else:
+		c.logger = HDF5Logger("testing.h5", buffer_length=1000000,version='2.4') # default to "latest version"
 	#c.logger = HDF5Logger("testing.h5", buffer_length=10000)
 	c.logger.enable()
 	c.logger.is_enabled()
@@ -1179,23 +1184,23 @@ def get_baseline_periodicselftrigger(c,chip):
 		if ASICversion.get() == 'v2a':
 			cmd=['python socket_baselines_v2astd.py']
 		elif ASICversion.get() == 'v2b':
-			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
+			cmd=['python socket_baselines_v2bstd.py',BasePath+DateDirPath]
 		elif ASICversion.get() == 'v3':
-			cmd=['python3','socket_baselines_v3std.py',DateDirPath]
+			cmd=['python3','socket_baselines_v3std.py',DateDirPath,BasePath]
 		else:
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
-			cmd=['python','socket_baselines_v2bstd.py',DateDirPath]
+			cmd=['python','socket_baselines_v2bstd.py',BasePath+DateDirPath]
 		start_time=time.time()
 		# open for append a file to use for log file
 		saveProcessLog=True
 		if (saveProcessLog):
 			#open file for output
 			ChipSN=mychipIDBox[0].get()
-			if not os.path.exists(DateDirPath+"/baselines"): os.makedirs(DateDirPath+"/baselines")
+			if not os.path.exists(BasePath+DateDirPath+"/baselines"): os.makedirs(BasePath+DateDirPath+"/baselines")
 			testcycle=0
 			maxtestcycle=100
 			while testcycle < maxtestcycle:
-				ProcessLogFileName=DateDirPath+"/baselines/baseline-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
+				ProcessLogFileName=BasePath+DateDirPath+"/baselines/baseline-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
 				if not os.path.isfile(ProcessLogFileName): 
 					break
 				testcycle=testcycle+1
@@ -1562,8 +1567,11 @@ def RunControl():
 			# Increment SN if check box enabled
 			if SNAutoIncrement.get() == '1' :
 				SNUp()
-		# Close the server
-		return
+		# Closed the server
+		# return 
+		# only run one batch per session, so exit
+		print('TCP client disconnected, Exiting')
+		exit()
 
 #def RunTests(c,chip):
 def RunTests():
@@ -1629,7 +1637,7 @@ def RunTests():
 
 	# Write results of interface config to dated file
     # New dated file paths and names  
-	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
+	configResFileName=BasePath+DateDirPath+"/netconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	if os.path.exists(configResFileName) : 
 		configResFile=open(configResFileName,mode='a')
@@ -1654,11 +1662,11 @@ def RunTests():
 	#print(chip)
 
 	#test flipping bits in config register and see that they configure
-	if ASICversion.get() == 'v2d' or ASICversion.get() == 'v3':
+	if ASICversion.get() == 'v2d' : #or ASICversion.get() == 'v3':
 		register_results=0
 		print('##############################################################')
 		print('##############################################################')
-		print('###     SKIPPING FLIP BIT CHECK for V2D or v3              ###')
+		print('###     SKIPPING FLIP BIT CHECK for V2D or v3 b4 20250903  ###')
 		print('##############################################################')
 		print('##############################################################')
 	else:
@@ -1982,8 +1990,10 @@ def trygui():
 		#print(test)
 		buttonVars.append(tk.StringVar())
 		#buttonVars[testID].set(testDefaults[testID])
+		if row > 0 : checkstate = tk.DISABLED
+		else: checkstate = tk.NORMAL
 		testButton.append(ttk.Checkbutton(testCheckframe,
-			text=test,variable=buttonVars[testID],command=printStatus))
+			text=test,variable=buttonVars[testID],command=printStatus,state=checkstate))
 		testButton[testID].grid(column=0,row=row,sticky="W")
 		row = row+1
 		testID=testID+1
@@ -2124,16 +2134,17 @@ def trygui():
 def mainish():
 	
 	#Determine Date/Batch directory to use for this set of tests
-	global DateDirPath
+	global DateDirPath,BasePath
+	BasePath = '/data/' # BasePath for data/config files
 	DateDirPath = time.strftime("%y%m%d")
 	BatchNum=0
 	BatchPath=DateDirPath+"-"+str(BatchNum)
-	while os.path.exists(BatchPath) : # Batch exists
+	while os.path.exists(BasePath+BatchPath) : # Batch exists
 		BatchNum = BatchNum+1 # increment until it doesn't
 		BatchPath=DateDirPath+"-"+str(BatchNum)
 	DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
-	print('Using path/filename ',DateDirPath)
-	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
+	print('Using path/filename ',BasePath+DateDirPath)
+	if not os.path.exists(BasePath+DateDirPath) : os.mkdir(BasePath+DateDirPath)
 
 	trygui() 
 	
