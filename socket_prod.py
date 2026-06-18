@@ -22,6 +22,10 @@ import tcp_server_prod as tsp
 import random
 import csv
 #import t
+
+# force line buffering for output (it was failing to update when piping to tee )
+sys.stdout.reconfigure(line_buffering=True)
+
 global SNList
 global PacmanVersion
 global ForceRegisterWrites 
