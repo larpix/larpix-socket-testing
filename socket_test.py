@@ -19,17 +19,10 @@ import runpy
 import numpy as np
 import simpleaudio as sa
 import tcp_server_prod as tsp
-import random
 import csv
 #import t
-
-# force line buffering for output (it was failing to update when piping to tee )
-sys.stdout.reconfigure(line_buffering=True)
-
 global SNList
 global PacmanVersion
-global ForceRegisterWrites 
-ForceRegisterWrites = False
 PacmanVersion = 'RevS1'
 #PacmanVersion = 'pacman4'
 
@@ -85,12 +78,7 @@ def init_controller():
 			c.io = PACMAN_IO(config_filepath='/home/apdlab/larpixv2/configs/io/pacman4.json',asic_version=2)
 	else:
 		exit('PacmanVersion not specified, exiting...')
-	waittime=10
-	#print('waiting for '+str(waittime)+' seconds for io to be established')
-	time.sleep(waittime)
-	pingresults=c.io.ping(1)
-	#print('ping returned ')
-	#print(pingresults)
+	c.io.ping()
 	return c
 
 def init_board_base(c,_default_io_channel=1): # only called for v2a or v2b
@@ -120,35 +108,6 @@ def init_board_base(c,_default_io_channel=1): # only called for v2a or v2b
 	#else:
 	#c.load(controller_config)
 
-def power_readback(io, io_group, pacman_version, tile):
-    readback={}
-    for i in tile:
-        readback[i]=[]
-        if pacman_version=='v1rev4':
-            vdda=io.get_reg(0x24030+(i-1), io_group=io_group)
-            vddd=io.get_reg(0x24040+(i-1), io_group=io_group)
-            idda=io.get_reg(0x24050+(i-1), io_group=io_group)
-            iddd=io.get_reg(0x24060+(i-1), io_group=io_group)
-            print('Tile ',i,'  VDDA: ',vdda,' mV  IDDA: ',int(idda*0.1),' mA  ',
-                  'VDDD: ',vddd,' mV  IDDD: ',int(iddd>>12),' mA')
-            readback[i]=[vdda, idda*0.1, vddd, iddd>>12]
-        elif pacman_version=='v1rev3' or 'v1revS1' or 'RevS1':
-            vdda=io.get_reg(0x00024001+(i-1)*32+1, io_group=io_group)
-            idda=io.get_reg(0x00024001+(i-1)*32, io_group=io_group)
-            vddd=io.get_reg(0x00024001+(i-1)*32+17, io_group=io_group)
-            iddd=io.get_reg(0x00024001+(i-1)*32+16, io_group=io_group)
-            print('Tile ',i,'  VDDA: ',(((vdda>>16)>>3)*4),' mV  IDDA: ',
-                  (((idda>>16)-(idda>>31)*65535)*500*0.001),' mA  VDDD: ',\
-                  (((vddd>>16)>>3)*4),' mV  IDDD: ',
-                  (((iddd>>16)-(iddd>>31)*65535)*500*0.001),' mA')
-            readback[i]=[(((vdda>>16)>>3)*4),
-                         (((idda>>16)-(idda>>31)*65535)*500*0.001),
-                         (((vddd>>16)>>3)*4),
-                         (((iddd>>16)-(iddd>>31)*65535)*500*0.001)]
-        else:
-            print('WARNING: PACMAN version ',pacman_version,' unknown')
-            return readback
-    return readback
 
 def measure_currents(c):
 	loop=0
@@ -186,10 +145,9 @@ def wait_here():
 def test_config_registers(c,chip):
 	#print(chip.config)
 	#invert chip config (for many registers)
-	if ASICversion.get() == 'v2' or ASICversion.get() == 'v2b' or ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' :
-		# CSA GAIN
-		flipmask=0b1
-		chip.config.csa_gain=flipmask^chip.config.csa_gain
+	# CSA GAIN
+	flipmask=0b1
+	chip.config.csa_gain=flipmask^chip.config.csa_gain
 	# CSA BYPASS ENABLE
 	flipmask=0b1
 	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
@@ -258,10 +216,9 @@ def test_config_registers(c,chip):
 		return 2
 
 	#invert chip config (for many registers) (returns to original)
-	if ASICversion.get() == 'v2' or ASICversion.get() == 'v2b' or ASICversion.get() == 'v2c' or ASICversion.get() == 'v2d' :
-		# CSA GAIN
-		flipmask=0b1
-		chip.config.csa_gain=flipmask^chip.config.csa_gain
+	# CSA GAIN
+	flipmask=0b1
+	chip.config.csa_gain=flipmask^chip.config.csa_gain
 	# CSA BYPASS ENABLE
 	flipmask=0b1
 	chip.config.csa_bypass_enable=flipmask^chip.config.csa_bypass_enable
@@ -342,7 +299,6 @@ def conf_root(c,cm,cadd,iog,iochan):
 	TX_SLICE=15
 	R_TERM=2
 	I_RX=8
-	V_CM = 5
 	#REF_CURRENT_TRIM = 0
 	REF_CURRENT_TRIM = 15
 	if ASICversion.get() == 'v2b':
@@ -423,15 +379,6 @@ def conf_root(c,cm,cadd,iog,iochan):
 	c.write_configuration(cm, 'i_tx_diff1')
 	c[cm].config.tx_slices1=TX_SLICE
 	c.write_configuration(cm, 'tx_slices1')
-	c[cm].config.v_cm_lvds_tx0 = V_CM
-	c.write_configuration(cm, 'v_cm_lvds_tx0')
-	c[cm].config.v_cm_lvds_tx1 = V_CM
-	c.write_configuration(cm, 'v_cm_lvds_tx1')
-	c[cm].config.v_cm_lvds_tx2 = V_CM
-	c.write_configuration(cm, 'v_cm_lvds_tx2')
-	c[cm].config.v_cm_lvds_tx3 = V_CM
-	c.write_configuration(cm, 'v_cm_lvds_tx3')
-
 	#c.io.set_reg(0x18, 1, io_group=1)
 	c[cm].config.enable_piso_downstream=[1,1,1,1] # krw adding May 8, 2023
 	c.write_configuration(cm, 'enable_piso_downstream')
@@ -461,38 +408,6 @@ def conf_root(c,cm,cadd,iog,iochan):
 	#print('c.chips')
 	#print(c.chips)
 
-def report_enf_conf_results(ok,diff,chip_key,comment=''):
-	if ok:
-		print('Verify succeeded ',comment)
-	else:
-		#print([register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None])
-		n_not_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is None] )
-		n_diff_returned = len( [register_address for register_address in diff[chip_key].keys() if diff[chip_key][register_address][1] is not None] )
-		print('Found differences in verify config with ',n_not_returned,' not responding and ',n_diff_returned,' differences ',comment)
-
-
-def test_config_verify(c,chip_key):
-    count = 0
-    NTESTS = 5
-
-    for trial in range(NTESTS):
-
-        print(f'Test: {trial+1}/{NTESTS}')
-
-        l = [random.randint(0, 31) for _ in range(64)]
-        c[chip_key].config.pixel_trim_dac = l
-        c.write_configuration(chip_key, 'pixel_trim_dac')
-        #c.write_configuration(chip_key)
-
-        ok, diff = c.verify_configuration(chip_key, timeout=0.01, connection_delay=0.01, n=1)
-
-        if ok:
-            count += 1
-        else:
-            report_enf_conf_results(ok,diff,chip_key,'in test_config_verify')
-			#print(diff)
-    print(count)
-
 def init_chips_v2c(c,io_channel):
 	###########################################
 	IO_GROUP = 1
@@ -508,31 +423,12 @@ def init_chips_v2c(c,io_channel):
 	#VDDA_DAC= 44500 # ~1.8 V
 	#VDDD_DAC = 28500 # ~1.1 V
 	#VDDA_DAC = 55000 # 2.2V
-	#VDDA_DAC = 56000  # 2.23v
-	#VDDA_DAC = 56500 # 2.25V
-	#VDDA_DAC = 63000 # 2.5V
-	#VDDA_DAC = 65535 # 2.59V
+	VDDA_DAC = 56000  # 2.23v
+	VDDA_DAC = 56500 # 2.25V
 	#VDDD_DAC = 44500
-	#VDDD_DAC = 30000   #~1.2V
+	VDDD_DAC = 30000   #~1.2V
 	#VDDD_DAC = 44500 #~1.8V
 	RESET_CYCLES = 300000 #5000000
-
-	# set the voltage for different ASIC versions
-	if ASICversion.get() == 'v2b':
-		VDDD_DAC = 43785
-		VDDA_DAC = 43875
-	elif ASICversion.get() == 'v2c':
-		VDDD_DAC = 30000
-		VDDA_DAC = 44500
-	elif ASICversion.get() == 'v2d':
-		VDDD_DAC = 44500 # changed from 30000 to 44500 on 5/13/2025, 
-		VDDA_DAC = 44500
-	elif ASICversion.get() == 'v3':
-		VDDA_DAC = 63000 # 2.5V
-		VDDD_DAC = 30000   #~1.2V
-	else:
-		print('Unknown ASIC version: ',ASICversion.get())
-		return
 
 	REF_CURRENT_TRIM=0
 	###########################################
@@ -556,13 +452,7 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x00000010, 0, io_group)
 		# set up mclk in pacman
 		c.io.set_reg(0x101c, 0x4, io_group)
-		if ASICversion.get() == 'v3':
-			c.io.set_uart_clock_ratio(IO_CHAN,   5)
-			print('configuring uart clock for v3')
-		else: # anything not v3 gets 5MHz data uart clock
-			print('configuring uart clock for v2')
-			c.io.set_uart_clock_ratio(IO_CHAN,   10)
-
+		
 		# enable pacman power
 		c.io.set_reg(0x00000014, 1, io_group)
 		#set voltage dacs to 0V  
@@ -600,92 +490,39 @@ def init_chips_v2c(c,io_channel):
 		c.io.set_reg(0x1010, clk_ctrl, io_group=IO_GROUP)
 		time.sleep(0.01)
 
-	readback = power_readback(c.io,IO_GROUP,PacmanVersion,[2])
-	ChipSN = mychipIDBox[0].get()
-	#print(readback)
-	with open('PowerReadback.log',"a") as powerlog:
-		powerlog.write(ChipSN+' vdda: '+f'{readback[2][0]:.2f}'+' mV idda: '+f'{readback[2][1]:.2f}'+
-				 ' mA  vddd: '+f'{readback[2][2]:.2f}'+' mV  iddd: '+f'{readback[2][3]:.2f}'+' mA\n')
-
-	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn dealt with in conf_root
-	#print('chip_key=',chip_key)
+	chip_key=larpix.key.Key(IO_GROUP,IO_CHAN,chip_id)  # ASIC vsn deal with in conf_root
 	conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
-	#print(c[chip_key].config)
-	conf_root_tries=1
-	conf_root_tries_limit=4
-	if c.verify_registers([(chip_key,122)],timeout=0.02)[0] :
-		print('chip_id succeeded, write all registers')
-		c.write_configuration(chip_key)
-	else:
-		while not c.verify_registers([(chip_key,122)],timeout=0.02)[0] :
-			print('chip_id reg 122 did not verify')
-			#print(c.read_configuration(chip_key,'chip_id',timeout=0.02))
-			print(c.verify_registers([(chip_key,122)],timeout=0.02))
-			#RESET_CYCLES = 50000
-			#c.io.set_reg(0x1014,RESET_CYCLES,io_group=IO_GROUP)
-			#time.sleep(0.01)	
-			#conf_root(c,chip_key,chip_id,IO_GROUP,IO_CHAN)	
-			c.write_configuration(chip_key)
-			conf_root_tries +=1
-			if conf_root_tries > conf_root_tries_limit:
-				print('Tried write_configuration ',conf_root_tries,' times, limit is ',conf_root_tries_limit)
-				break
-	#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
-	ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
-	report_enf_conf_results(ok,diff,chip_key,' after conf_root')
-	##################################
-	#test_config_verify(c,chip_key)
-	##################################
-	#c.write_configuration(chip_key)
-	#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
+	c.write_configuration(chip_key)
+	#verified,returnregisters=c.verify_configuration(chip_key)
+	#print(verified,returnregisters)
 	# Try write/read once only
 	PassedConfigAt=0
-	ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
-	report_enf_conf_results(ok,diff,chip_key,' in verify_config after conf_root')
-	#print('Found ',len(diff),' differences in verify_config')
+	ok, diff = c.verify_configuration(chip_key, n=1 )
 	# Try readback twice, only write once
 	if ok : 
-		print(ok,' Passed at first verify n=1 ')
+		print(ok,' Passed at verify n=1')
 		PassedConfigAt=1
 	else:  
-		#print('Failed with verify n=1',diff)
-		print('Failed with verify n=1')
-		ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=2 )
-		print('Found ',len(diff),' differences in verify_config')
+		print('Failed with verify n=1',diff)
+		ok, diff = c.verify_configuration(chip_key, n=2 )
 	# Try writing twice / reading twice
 	if ok and PassedConfigAt==0 : 
 		print(ok,' Passed at verify n=2')
 		PassedConfigAt=2
 	elif PassedConfigAt==0:
-		#print('Failed with verify n=2',diff)		
-		print('Failed with verify n=2')		
-		#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
-		c.write_configuration(chip_key)
-		ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
-		report_enf_conf_results(ok,diff,chip_key,'after verify n=2 failed')
-		#print('Found ',len(diff),' differences in first enf config')
+		print('Failed with verify n=2',diff)		
+		ok, diff = c.enforce_configuration( chip_key, n=2, n_verify=2 )
 	if ok and PassedConfigAt==0 : 
-		print(ok,' Passed after another write/verify')
+		print(ok,' Passed at enforce_configuration n=2,n_verify=2')
 		PassedConfigAt=3
 	elif PassedConfigAt==0:
-		enforcelimit=3
-		enforcecount=0
-		while not ok and enforcecount < enforcelimit :
-			print('trying write/verify again...')
-			#ok, diff = c.enforce_configuration( chip_key, timeout=0.02, n=2, n_verify=2 )
-			c.write_configuration(chip_key)
-			ok, diff = c.verify_configuration(chip_key, timeout=0.02, n=1 )
-			report_enf_conf_results(ok,diff,chip_key,'while enforcing again')
-			#print('Found ',len(diff),' differences in first enf config')
-			enforcecount +=1
-		if not ok:
-			#print('Failed with enforce_configuration  timeout=0.02,n=2,n_verify=2',diff)		 
-			print('Failed write/verify on try ',enforcecount)		 
-		else:
-			PassedConfigAt = 3 + enforcecount
+		print('Failed with enforce_configuration n=2,n_verify=2',diff)		 
+	#print('list(c.chips.values()= ',list(c.chips.values()))
+	#print('list(c.chips.values())[0]= ',list(c.chips.values())[0])
+	#print('list(c.chips.items())[0]= ',list(c.chips.items())[0])
 	# Write results of interface config to dated file
 	# New dated file paths and names  
-	configChipResFileName=BasePath+DateDirPath+"/chipconfig"+DateDirPath+".csv"
+	configChipResFileName=DateDirPath+"/chipconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	ChipSN=mychipIDBox[0].get()
 	if os.path.exists(configChipResFileName) : 
@@ -1002,10 +839,7 @@ def ReadChannelLoop(c,chip,firstChan=0,lastChan=NumASICchannels-1,monitor=0):
 	#c.stop_listening()
 	chip.config.channel_mask = [1] * NumASICchannels  # Turn off all channels
 	chip.config.periodic_trigger_mask = [1] * NumASICchannels  # Turn off all channels
-	if ForceRegisterWrites == True:
-		c.enforce_configuration(chip.chip_key, timeout=0.02,)
-	else:
-		c.write_configuration(chip.chip_key)
+	c.write_configuration(chip.chip_key)
 
 
 def ReadChannel(c,chip,chan,monitor=0):
@@ -1027,49 +861,20 @@ def ReadChannel(c,chip,chan,monitor=0):
 		# Enable analog monitor on channel
 		c.enable_analog_monitor(chip.chip_key,chan)
 		print("Running Analog mon for Pulser on channel ",chan)
-	c.write_configuration(chip.chip_key,'periodic_trigger_mask')
-	c.write_configuration(chip.chip_key,'channel_mask')
-	c.write_configuration(chip.chip_key,'periodic_trigger_mask')
-	c.write_configuration(chip.chip_key,'channel_mask')
-	#c.enforce_configuration((chip.chip_key,'periodic_trigger_mask'))  # this construction doesn't exist, wants integer register?
-	#c.enforce_configuration((chip.chip_key,'channel_mask'))  # this construction doesn't exist, wants integer register?
-	if  chan == 0 :
-		if ForceRegisterWrites == True:
-			c.enforce_configuration(chip.chip_key, timeout=0.02)  # this should store config before first data segment.
-		else:
-			c.write_configuration(chip.chip_key)
-			c.verify_configuration(chip.chip_key,n=1) # this should store config before first data segment.
-
+	c.write_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2) # this should store config before each data segment.
 	print('***************************************')
 	print('****      READ CHANNEL             ****')
 	print('***************************************')
 	#print(chip.config)
 	#c.verify_configuration(chip.chip_key,n=2)
 	loop=0
-	readpackets=0
-	minpackets=400
-	readchannel=None
-	looplimit=4
+	looplimit=1
 	while loop<looplimit :
 		# Read some Data (this also delays a bit)
 		c.run(0.1,'test')
 		#print(c.reads[-1])
-		readpackets=len(c.reads[-1])
-		print("read ",readpackets," packets")
-		if readpackets > 10:
-			for packet in range(1,10):
-				#print('packet ',packet,' ',c.reads[-1][-packet])
-				if c.reads[-1][-packet].chip_key == chip.chip_key:
-					readchannel=c.reads[-1][-packet].channel_id
-				if readchannel != None:
-					break
-			print("readchannel is ",readchannel)
-		if readchannel == chan and readpackets > minpackets :
-			break
-		else:
-			c.write_configuration(chip.chip_key,'periodic_trigger_mask')
-			c.write_configuration(chip.chip_key,'channel_mask')
-			print('Trying again')
+		print("read ",len(c.reads[-1])," packets")
 		#wait_here()
 		loop=loop+1
 
@@ -1103,12 +908,8 @@ def get_baseline_selftrigger(c,chip):
 	print("the end")
 
 	c.logger.disable()
-	#c.logger.flush() # disable already flushes
+	#c.logger.flush()
 	#c.logger.close()
-	readslen1=len(c.reads)
-	c.reads.clear() # clears the read buffers to prevent infinite memory growth.
-	readslen2=len(c.reads)
-	print('reads object had '+str(readslen1)+' objects and now has '+str(readslen2))
 
 	import socket_baselines
 
@@ -1145,10 +946,7 @@ def get_baseline_periodicselftrigger(c,chip):
 	subprocess.run(["rm","testing.h5"])
 
 	#logger declared and switched enabled.
-	if ASICversion.get() == 'v3':
-		c.logger = HDF5Logger("testing.h5", buffer_length=1000000) # default to "latest version"
-	else:
-		c.logger = HDF5Logger("testing.h5", buffer_length=1000000,version='2.4') # default to "latest version"
+	c.logger = HDF5Logger("testing.h5", buffer_length=1000000)
 	#c.logger = HDF5Logger("testing.h5", buffer_length=10000)
 	c.logger.enable()
 	c.logger.is_enabled()
@@ -1167,12 +965,8 @@ def get_baseline_periodicselftrigger(c,chip):
 
 	print("disabling the logger")
 	c.logger.disable()
-	#c.logger.flush() # disable already flushes
+	#c.logger.flush()
 	#c.logger.close()
-	readslen1=len(c.reads)
-	c.reads.clear() # clears the read buffers to prevent infinite memory growth.
-	readslen2=len(c.reads)
-	print('reads object had '+str(readslen1)+' objects and now has '+str(readslen2))
 
 	# turn off periodic trigger channels
 	chip.config.periodic_trigger_mask= [1] * NumASICchannels
@@ -1188,27 +982,13 @@ def get_baseline_periodicselftrigger(c,chip):
 		if ASICversion.get() == 'v2a':
 			cmd=['python socket_baselines_v2astd.py']
 		elif ASICversion.get() == 'v2b':
-			cmd=['python socket_baselines_v2bstd.py',BasePath+DateDirPath]
+			cmd=['python socket_baselines_v2bstd.py',DateDirPath]
 		elif ASICversion.get() == 'v3':
-			cmd=['python3','socket_baselines_v3std.py',DateDirPath,BasePath]
+			cmd=['python3','socket_baselines_v3std.py',DateDirPath]
 		else:
 			print('*** Running v2b specific baselines, but ASIC !=v2b No idea quality of results ***')
-			cmd=['python','socket_baselines_v2bstd.py',BasePath+DateDirPath]
+			cmd=['python','socket_baselines_v2bstd.py',DateDirPath]
 		start_time=time.time()
-		# open for append a file to use for log file
-		saveProcessLog=True
-		if (saveProcessLog):
-			#open file for output
-			ChipSN=mychipIDBox[0].get()
-			if not os.path.exists(BasePath+DateDirPath+"/baselines"): os.makedirs(BasePath+DateDirPath+"/baselines")
-			testcycle=0
-			maxtestcycle=100
-			while testcycle < maxtestcycle:
-				ProcessLogFileName=BasePath+DateDirPath+"/baselines/baseline-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
-				if not os.path.isfile(ProcessLogFileName): 
-					break
-				testcycle=testcycle+1
-			ProcessLogFile=open(ProcessLogFileName,'w')
 		# omit 'shell=True' when using a list for Popen, otherwise shell gets the extra args, Argh
 		with Popen(cmd, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
 			FirstLine=True
@@ -1218,18 +998,12 @@ def get_baseline_periodicselftrigger(c,chip):
 					mypid=line # first line should just be the PID from the subprocess
 					FirstLine=False
 				print(line, end='') # process line here
-				if (saveProcessLog):
-					# print stdout from subrpocess to log file
-					ProcessLogFile.write(line)
 				dt=time.time()-start_time
 				#print('dt=',dt)
 				if dt > 30 : 
 					# PID of process sent as first output (set in socket_baselines.py)
 					print('mypid socket_baselines is ',mypid)
 					os.kill(int(mypid),signal.SIGKILL)
-		if (saveProcessLog):
-			#close file for output
-			ProcessLogFile.close()
 
 		nBadBaselineChannels=p.returncode
 		#if p.returncode != 0:
@@ -1475,13 +1249,6 @@ def RunControl():
 	Result8='8\r'
 	Result9='9\r'
 
-	#start a global controller
-	global c
-	c=[]
-	#print(c)
-	if len(c) == 0 :
-		c=init_controller()
-
 	if UseTCPIPControlState.get() == '0' :  # if TCPIPControl is not checked, just RunTests()
 		totalBadChannels = RunTests()  # Single chip test mode
 		# Increment SN if check box enabled
@@ -1554,6 +1321,11 @@ def RunControl():
 						print('Starting tests')
 						# Run Tests
 						ResultNum=RunTests()
+					elif message == -999 : 
+						print('Handler TCPIP Disconnected, Exiting...')
+						exit()
+					else :
+						print('Unexpected message from handler ',message)
 					
 				#time.sleep(5)
 				#ResultNum=0 # Fake result for testing
@@ -1571,11 +1343,8 @@ def RunControl():
 			# Increment SN if check box enabled
 			if SNAutoIncrement.get() == '1' :
 				SNUp()
-		# Closed the server
-		# return 
-		# only run one batch per session, so exit
-		print('TCP client disconnected, Exiting')
-		exit()
+		# Close the server
+		return
 
 #def RunTests(c,chip):
 def RunTests():
@@ -1617,9 +1386,8 @@ def RunTests():
 	#INIT BOARD/CHIP and test all 4 comm links
 	init_chip_results=0
 	for io_channel in [4,3,2,1]: 
-		#if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
-		#if io_channel == 4: c=init_controller() # create a new clean controller instance if none exists
-		c.chips.clear() # clear out the chips
+		if io_channel != 4 : c.io.cleanup() # stop zmq io threads needed if you make a new controller
+		c=init_controller() # create a new clean controller instance
 		chip = 0
 		if ASICversion.get() == 'v2a' or ASICversion.get() == 'v2b' : # run working intialization of v2b and v2a chips
 			#init_board(c) # defaults to channel 1
@@ -1641,7 +1409,7 @@ def RunTests():
 
 	# Write results of interface config to dated file
     # New dated file paths and names  
-	configResFileName=BasePath+DateDirPath+"/netconfig"+DateDirPath+".csv"
+	configResFileName=DateDirPath+"/netconfig"+DateDirPath+".csv"
 	# If file exists, append with no header
 	if os.path.exists(configResFileName) : 
 		configResFile=open(configResFileName,mode='a')
@@ -1666,11 +1434,11 @@ def RunTests():
 	#print(chip)
 
 	#test flipping bits in config register and see that they configure
-	if ASICversion.get() == 'v2d' : #or ASICversion.get() == 'v3':
+	if ASICversion.get() == 'v2d' or ASICversion.get() == 'v3':
 		register_results=0
 		print('##############################################################')
 		print('##############################################################')
-		print('###     SKIPPING FLIP BIT CHECK for V2D or v3 b4 20250903  ###')
+		print('###     SKIPPING FLIP BIT CHECK for V2D or v3              ###')
 		print('##############################################################')
 		print('##############################################################')
 	else:
@@ -1994,10 +1762,8 @@ def trygui():
 		#print(test)
 		buttonVars.append(tk.StringVar())
 		#buttonVars[testID].set(testDefaults[testID])
-		if row > 0 : checkstate = tk.DISABLED
-		else: checkstate = tk.NORMAL
 		testButton.append(ttk.Checkbutton(testCheckframe,
-			text=test,variable=buttonVars[testID],command=printStatus,state=checkstate))
+			text=test,variable=buttonVars[testID],command=printStatus))
 		testButton[testID].grid(column=0,row=row,sticky="W")
 		row = row+1
 		testID=testID+1
@@ -2138,17 +1904,16 @@ def trygui():
 def mainish():
 	
 	#Determine Date/Batch directory to use for this set of tests
-	global DateDirPath,BasePath
-	BasePath = '/data/' # BasePath for data/config files
+	global DateDirPath
 	DateDirPath = time.strftime("%y%m%d")
 	BatchNum=0
 	BatchPath=DateDirPath+"-"+str(BatchNum)
-	while os.path.exists(BasePath+BatchPath) : # Batch exists
+	while os.path.exists(BatchPath) : # Batch exists
 		BatchNum = BatchNum+1 # increment until it doesn't
 		BatchPath=DateDirPath+"-"+str(BatchNum)
 	DateDirPath=BatchPath # Use the BatchPath for the directory and filenames
-	print('Using path/filename ',BasePath+DateDirPath)
-	if not os.path.exists(BasePath+DateDirPath) : os.mkdir(BasePath+DateDirPath)
+	print('Using path/filename ',DateDirPath)
+	if not os.path.exists(DateDirPath) : os.mkdir(DateDirPath)
 
 	trygui() 
 	
