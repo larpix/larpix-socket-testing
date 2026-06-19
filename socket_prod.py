@@ -1367,6 +1367,72 @@ def get_leakage_data():
 		#c.logger.flush()
 		c.logger.close()
 
+def get_synctest_data(c,chip,chan=10):
+	# Capture one channel while sync is running at 1kHz (estimated) 
+
+	# Turn on periodic_reset
+	chip.config.enable_periodic_reset = 1 
+	#chip.config.periodic_reset_cycles = 1000000 
+	# Reduce global threshold to get baseline data
+	chip.config.threshold_global=255 
+	# enable periodic trigger
+	chip.config.enable_periodic_trigger=1
+	chip.config.periodic_trigger_mask= [1] * NumASICchannels  # Turn off all channels
+	chip.config.enable_hit_veto = 0
+	# enable external sync
+	chip.config.enable_external_sync(1)  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
+	# set trigger period (100ns*period_trigger_cycles)
+	chip.config.periodic_trigger_cycles=1000 # 1k = 0.1ms should get 10 hits between syncs
+	#chip.config.periodic_trigger_cycles=10000 # 10k = 1ms
+	#chip.config.periodic_trigger_cycles=20000 # 20k = 2ms
+	#chip.config.periodic_trigger_cycles=100000 # 100k = 10ms
+	#chip.config.periodic_trigger_cycles=7500000 # 750k = 75ms
+	#chip.config.periodic_trigger_cycles=1000000 # 1000k = 100ms
+	c.write_configuration(chip.chip_key)
+	c.verify_configuration(chip.chip_key,n=2)
+
+	subprocess.run(["rm","testingSync.h5"])
+
+	#logger declared and switched enabled.
+	if ASICversion.get() == 'v3':
+		c.logger = HDF5Logger("testingSync.h5", buffer_length=1000000) # default to "latest version"
+	else:
+		c.logger = HDF5Logger("testingSync.h5", buffer_length=1000000,version='2.4') # default to "latest version"
+	#c.logger = HDF5Logger("testing.h5", buffer_length=10000)
+	c.logger.enable()
+	c.logger.is_enabled()
+
+	#c.verify_configuration(chip.chip_key,n=2)
+	#print(chip.config)
+	print("Starting ReadChannelLoop...")
+
+	Monitor = 0 # display analog mon (1) or not (0) 
+	# ReadChannelLoop(c,chip,0,NumASICchannels-1,Monitor)
+	# only read one channel, randomly picking channel 10 
+	ReadChannel(c,chip,10)
+
+	print("the end")
+	textBox.config(bg="yellow")
+	#doneSong.play()
+	window.update()	
+
+	print("disabling the logger")
+	c.logger.disable()
+	#c.logger.flush() # disable already flushes
+	#c.logger.close()
+	readslen1=len(c.reads)
+	c.reads.clear() # clears the read buffers to prevent infinite memory growth.
+	readslen2=len(c.reads)
+	print('reads object had '+str(readslen1)+' objects and now has '+str(readslen2))
+
+	# turn off periodic trigger channels
+	chip.config.periodic_trigger_mask= [1] * NumASICchannels
+	chip.config.enable_periodic_trigger=0
+	# disable external sync
+	chip.config.enable_external_sync(0)  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
+
+	c.write_configuration(chip.chip_key)
+
 def get_ThreshLevels(c,chip):
 
 
@@ -1962,17 +2028,18 @@ def trygui():
 		for ChipNum in range(1,int(numChipVar.get())+1):
 			mychipIDBox[ChipNum-1].state(['!disabled'])
 
+	# repurpose ThreshLevel with synctest_data
 	global testList,testFunctionNames
 	testList = ["Baseline Periodic SelfTrig",
 			"Baseline Ext Trig",
-			"Thresh Levels",
+			"SYNC Test",
 			"Leakage Data",
 			"Charge Injection",
 			"Pulse Data",
 			"Analog Display"]
 	testFunctionNames = ["get_baseline_periodicselftrigger",
 				"get_baseline_periodicexttrigger",
-				"get_ThreshLevels",
+				"get_synctest_data",
 				"get_leakage_data",
 				"get_charge_injection",
 				"PulseChannelLoop",
