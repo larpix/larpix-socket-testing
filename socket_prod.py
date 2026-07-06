@@ -1380,7 +1380,7 @@ def get_synctest_data(c,chip,chan=10):
 	chip.config.periodic_trigger_mask= [1] * NumASICchannels  # Turn off all channels
 	chip.config.enable_hit_veto = 0
 	# enable external sync
-	chip.config.enable_external_sync(1)  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
+	chip.config.enable_external_sync = 1  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
 	# set trigger period (100ns*period_trigger_cycles)
 	chip.config.periodic_trigger_cycles=1000 # 1k = 0.1ms should get 10 hits between syncs
 	#chip.config.periodic_trigger_cycles=10000 # 10k = 1ms
@@ -1409,7 +1409,8 @@ def get_synctest_data(c,chip,chan=10):
 	Monitor = 0 # display analog mon (1) or not (0) 
 	# ReadChannelLoop(c,chip,0,NumASICchannels-1,Monitor)
 	# only read one channel, randomly picking channel 10 
-	ReadChannel(c,chip,10)
+	for i in range(10) : 
+		ReadChannel(c,chip,10)
 
 	print("the end")
 	textBox.config(bg="yellow")
@@ -1429,9 +1430,67 @@ def get_synctest_data(c,chip,chan=10):
 	chip.config.periodic_trigger_mask= [1] * NumASICchannels
 	chip.config.enable_periodic_trigger=0
 	# disable external sync
-	chip.config.enable_external_sync(0)  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
+	chip.config.enable_external_sync=0  # sync from PACMAN/pulser running at 1kHz with 300ns width 3.3V amplitude pulses
 
 	c.write_configuration(chip.chip_key)
+	
+	# process syncTest data
+	run_Popen=True
+	nBadSyncs=0
+	if run_Popen :
+		# Run syncCheck in subprocess to allow killing
+		cmd=['python','socket_synctests.py',DateDirPath,BasePath]
+		start_time=time.time()
+		# open for append a file to use for log file
+		saveProcessLog=True
+		if (saveProcessLog):
+			#open file for output
+			ChipSN=mychipIDBox[0].get()
+			if not os.path.exists(BasePath+DateDirPath+"/synctests"): os.makedirs(BasePath+DateDirPath+"/synctests")
+			testcycle=0
+			maxtestcycle=100
+			while testcycle < maxtestcycle:
+				ProcessLogFileName=BasePath+DateDirPath+"/synctests/synctest-"+DateDirPath+"-"+ChipSN+"-"+str(testcycle)+".log"
+				if not os.path.isfile(ProcessLogFileName): 
+					break
+				testcycle=testcycle+1
+			ProcessLogFile=open(ProcessLogFileName,'w')
+		# omit 'shell=True' when using a list for Popen, otherwise shell gets the extra args, Argh
+		with Popen(cmd, stdout=PIPE, stderr=STDOUT, bufsize=1, universal_newlines=True) as p:
+			FirstLine=True
+			print('hopefully running socket_synctests.py as ',cmd)
+			for line in p.stdout:
+				if FirstLine :
+					mypid=line # first line should just be the PID from the subprocess
+					FirstLine=False
+				print(line, end='') # process line here
+				if (saveProcessLog):
+					# print stdout from subrpocess to log file
+					ProcessLogFile.write(line)
+				dt=time.time()-start_time
+				#print('dt=',dt)
+				if dt > 30 : 
+					# PID of process sent as first output (set in socket_baselines.py)
+					print('mypid socket_baselines is ',mypid)
+					os.kill(int(mypid),signal.SIGKILL)
+		if (saveProcessLog):
+			#close file for output
+			ProcessLogFile.close()
+
+		nBadSyncs=p.returncode
+		print(nBadSyncs)
+
+	if int(nBadSyncs) == 0 :
+		textBox.config(bg="green")
+		#successSong.play()
+		window.update()	
+	else : 
+		textBox.config(bg="red") # flashing? 
+		#sadSong.play()
+		window.update()	
+
+	return nBadSyncs
+
 
 def get_ThreshLevels(c,chip):
 
@@ -2061,7 +2120,7 @@ def trygui():
 		#print(test)
 		buttonVars.append(tk.StringVar())
 		#buttonVars[testID].set(testDefaults[testID])
-		if row > 0 : checkstate = tk.DISABLED
+		if row != 0 and row != 2 : checkstate = tk.DISABLED
 		else: checkstate = tk.NORMAL
 		testButton.append(ttk.Checkbutton(testCheckframe,
 			text=test,variable=buttonVars[testID],command=printStatus,state=checkstate))
